@@ -1,0 +1,38 @@
+{
+    "SPRITE_LOCATION": "\\Sprites\\SpitfireCannons.png",
+    "DIMENSIONS": [64, 64],
+    "FRAMES": 6,
+    "GUNS": {
+        "303": {
+            "RATEOFFIRE": 1000,
+            "RESERVE": 1400,
+            "TIMEOUT": 0.04,
+            "LAST_SHOT": 0,
+            "POSITION": [
+                [8, 15],
+                [13, 15],
+                [51, 15],
+                [56, 15]
+            ]
+        },
+        "20": {
+            "RATEOFFIRE": 600,
+            "RESERVE": 120,
+            "TIMEOUT": 0.06,
+            "LAST_SHOT": 0,
+            "POSITION": [
+                [18, 15],
+                [46, 15]
+            ]
+        }
+    },
+    "HITBOXES": {
+        "MIDDLE": {"BOUNDING_BOX": [32, 32], "HP": 500}
+    },
+    "PLANE_SPEED": 400,
+    "PLANE_FRAME": 1,
+    "PLANE_TIMER": 0,
+    "PLANE_TIMEOUT": 0.005,
+    "PLANE_BACKGROUD": [255, 0, 255],
+    "PLANE_SCALE": 3
+}
