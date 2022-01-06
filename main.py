@@ -144,14 +144,15 @@ class Circle:
 
 
 class Bullet:
-    def __init__(self, angle, startx, starty, _type, player_origin: bool):
+    def __init__(self, angle, startx, starty, _type, player_origin: tuple):
         self.info = AMMO_INFO[_type]
         self.BORNED = time.time()
         self.angle = angle
         self.alive = True
         self.pos = [startx, starty]
         self.colider = Circle([startx, starty], 1)
-        self.player_origin = player_origin
+        self.player_origin = player_origin[0]
+        self.player = None if player_origin[1] is None else player_origin[1]
 
     def update(self, dt):
         if FREEZE:
@@ -164,8 +165,13 @@ class Bullet:
                     continue
                 i.get_hit(self.info["DAMAGE"])
         self.colider = Circle(self.pos, BULLET_RADIUS)
+        self.colider.radius = self.info["SIZE"]
 
     def render(self):
+        global drawing
+        if self.player is not None:
+            if distance(self.pos[0], self.player.position[0], self.pos[1], self.player.position[1]) > SCREENW:
+                return
         self.colider.draw()
 
 
@@ -233,7 +239,7 @@ class Player:
                         righty[1] + math.sin(self.angle + (math.pi / 2)) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
                     ]
                     self.guns[ammotype]["RESERVE"] -= 1
-                    bullets.append(Bullet(calculate_angle(to_, from_), to_[0], to_[1], ammotype, True))
+                    bullets.append(Bullet(calculate_angle(to_, from_), to_[0], to_[1], ammotype, (True, self)))
 
     def load_sprite_info(self, spi):
         if ".json" not in spi:
@@ -596,7 +602,7 @@ def update(dt, fps):
 
 
 def loop():
-    global running
+    global running, drawing
     getTicksLastFrame = 0
     while running:
         screen.fill((50, 50, 50))
@@ -609,6 +615,7 @@ def loop():
         update(dt, clock.get_fps())
         clock.tick(0)
         pygame.display.update()
+        print((p.position[0] - CAMERA_X, p.position[1] - CAMERA_Y))
     pygame.quit()
 
 

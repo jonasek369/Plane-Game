@@ -1,10 +1,12 @@
 {
     "20": {
         "DAMAGE": 20,
-        "SPEED": 4200
+        "SPEED": 4200,
+        "SIZE": 3
     },
     "303": {
         "DAMAGE": 10,
-        "SPEED": 5000
+        "SPEED": 5000,
+        "SIZE": 2
     }
 }
