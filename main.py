@@ -30,8 +30,8 @@ clock = pygame.time.Clock()
 
 FPS = 240
 
-BULLET_LIFETIME = 5
-BULLET_SPEED = 10000
+BULLET_LIFETIME = 15
+BULLET_RADIUS = 2
 
 entities = []
 bullets = []
@@ -130,25 +130,43 @@ def get_percentage(whole, number):
     return number / (whole / 100)
 
 
+def circles_collide(circle1, circle2):
+    return circle1.pos.distance_to(circle2.pos) <= circle1.radius + circle2.radius
+
+
+class Circle:
+    def __init__(self, pos, radius):
+        self.pos = Vector2(pos)
+        self.radius = radius
+
+    def draw(self):
+        pygame.draw.circle(screen, (255, 255, 0), self.pos, self.radius)
+
+
 class Bullet:
-    def __init__(self, angle, startx, starty):
+    def __init__(self, angle, startx, starty, _type, player_origin: bool):
+        self.info = AMMO_INFO[_type]
         self.BORNED = time.time()
         self.angle = angle
         self.alive = True
         self.pos = [startx, starty]
+        self.colider = Circle([startx, starty], 1)
+        self.player_origin = player_origin
 
     def update(self, dt):
         if FREEZE:
             return
-        self.pos[0] += math.cos(self.angle) * BULLET_SPEED * dt
-        self.pos[1] += math.sin(self.angle) * BULLET_SPEED * dt
+        self.pos[0] += math.cos(self.angle) * self.info["SPEED"] * dt
+        self.pos[1] += math.sin(self.angle) * self.info["SPEED"] * dt
         for i in entities:
-            if i.rect.collidepoint(self.pos):
-                i.alive = False
-                self.alive = False
+            if circles_collide(i.hitbox, self.colider):
+                if self.player_origin and i.isplayer:
+                    continue
+                i.get_hit(self.info["DAMAGE"])
+        self.colider = Circle(self.pos, BULLET_RADIUS)
 
-    def render(self, scr):
-        pygame.draw.circle(scr, (255, 255, 0), self.pos, 1)
+    def render(self):
+        self.colider.draw()
 
 
 class SpriteSheet:
@@ -162,34 +180,21 @@ class SpriteSheet:
         return image
 
 
-def circles_collide(circle1, circle2):
-    return circle1.pos.distance_to(circle2.pos) <= circle1.radius + circle2.radius
-
-
-class Circle:
-    def __init__(self, pos: Vector2, radius):
-        self.pos = pos
-        self.radius = radius
-
-    def draw(self):
-        pygame.draw.circle(screen, (0, 0, 255), self.pos, self.radius)
-
-
 class Player:
     def __init__(self, sprite_info):
         self.position = [SCREENW // 2, SCREENH // 2]
-        self.angle = -math.pi / 2
+        self.angle = math.pi * 1.5
         self.deltas = [math.cos(self.angle), math.sin(self.angle)]
         self.motor_percentage = 70
+        self.guns = {}
+        self.hitbox = None
 
-        self.guns = {
+        self.constants = {
 
         }
 
-        self.hitboxes_hp = {}
-        self.hitbox_circle = None
-
         self.alive = True
+        self.isplayer = True
         assert sprite_info is not None, "Class Player -> param: spritename -> Error: This parameter cant be None"
         self.sprite_info = {"PLANE_TIMER": time.time()}
         self.load_sprite_info(sprite_info)
@@ -197,23 +202,38 @@ class Player:
         self.spritesheet = SpriteSheet(self.sprite)
 
     def fire(self):
+        topleft = [
+            self.position[0] + math.cos(self.angle - 0.78) * (
+                    (self.sprite_info["DIMENSIONS"][0] * self.sprite_info["PLANE_SCALE"]) / 1.41),
+            self.position[1] + math.sin(self.angle - 0.78) * (
+                    (self.sprite_info["DIMENSIONS"][1] * self.sprite_info["PLANE_SCALE"]) / 1.41)
+        ]
         for ammotype in self.guns:
-            bullet_damage = AMMO_INFO[ammotype]["DAMAGE"]
-            bullet_speed = AMMO_INFO[ammotype]["SPEED"]
             if self.guns[ammotype]["LAST_SHOT"] + self.guns[ammotype]["TIMEOUT"] <= time.time():
                 if self.guns[ammotype]["RESERVE"] <= 0:
                     continue
                 self.guns[ammotype]["LAST_SHOT"] = time.time()
                 for GUNPOS in self.guns[ammotype]["POSITION"]:
-                    # TODO: MAKE THIS SO IT POINTS AT THE GUNS
-                    lefttop = [
-                        self.position[0] - (self.sprite_info["DIMENSIONS"][0] * self.sprite_info["PLANE_SCALE"]) / 2,
-                        self.position[1] - (self.sprite_info["DIMENSIONS"][1] * self.sprite_info["PLANE_SCALE"]) / 2
+                    righty = [
+                        topleft[0] + math.cos(self.angle - math.pi) * (GUNPOS[1] * self.sprite_info["PLANE_SCALE"]),
+                        topleft[1] + math.sin(self.angle - math.pi) * (GUNPOS[1] * self.sprite_info["PLANE_SCALE"])]
+                    backer = [
+                        topleft[0] + math.cos(self.angle - math.pi) * (
+                                (GUNPOS[1] - 1) * self.sprite_info["PLANE_SCALE"]),
+                        topleft[1] + math.sin(self.angle - math.pi) * (
+                                (GUNPOS[1] - 1) * self.sprite_info["PLANE_SCALE"])]
+                    from_ = [
+                        backer[0] + math.cos(self.angle + (math.pi / 2)) * (
+                                (GUNPOS[0]) * self.sprite_info["PLANE_SCALE"]),
+                        backer[1] + math.sin(self.angle + (math.pi / 2)) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
                     ]
-                    lefttop[0] -= math.cos(self.angle) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
-                    lefttop[1] -= math.sin(self.angle) * (GUNPOS[1] * self.sprite_info["PLANE_SCALE"])
-                    pygame.draw.circle(screen, (255, 0, 0), lefttop, 4)
-                    time.sleep(0.1)
+                    to_ = [
+                        righty[0] + math.cos(self.angle + (math.pi / 2)) * (
+                                GUNPOS[0] * self.sprite_info["PLANE_SCALE"]),
+                        righty[1] + math.sin(self.angle + (math.pi / 2)) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
+                    ]
+                    self.guns[ammotype]["RESERVE"] -= 1
+                    bullets.append(Bullet(calculate_angle(to_, from_), to_[0], to_[1], ammotype, True))
 
     def load_sprite_info(self, spi):
         if ".json" not in spi:
@@ -230,19 +250,17 @@ class Player:
         self.update_hitboxes()
 
     def update_hitboxes(self):
-        if not self.hitboxes_hp:
+        if self.hitbox is None:
             for PART in self.sprite_info["HITBOXES"]:
-                self.hitboxes_hp[PART] = {self.sprite_info["HITBOXES"][PART]["HP"]}
-        if self.hitbox_circle is None:
-            part_bb = self.sprite_info["HITBOXES"][PART]["BOUNDING_BOX"]
-            part_bb[0] = self.position[0]
-            part_bb[1] = self.position[1]
-            self.hitbox_circle = Circle(Vector2(part_bb), 25 * self.sprite_info["PLANE_SCALE"])
+                part_bb = self.sprite_info["HITBOXES"][PART]["BOUNDING_BOX"]
+                part_bb[0] = self.position[0]
+                part_bb[1] = self.position[1]
+                self.hitbox = Circle(Vector2(part_bb), 25 * self.sprite_info["PLANE_SCALE"])
 
-    def get_hit(self, PART_NAME, damage):
-        self.hitboxes_hp[PART_NAME]["HP"] -= damage
-        if self.hitboxes_hp[PART_NAME]["HP"] <= 0:
-            print("boom")
+    def get_hit(self, damage):
+        self.sprite_info["HP"] -= damage
+        if self.sprite_info["HP"] <= 0:
+            self.alive = False
 
     def render(self):
         global ang
@@ -255,17 +273,20 @@ class Player:
                                          self.sprite_info["DIMENSIONS"][1], self.sprite_info["PLANE_SCALE"])
         image_copy = pygame.transform.rotate(IMG, -math.degrees(self.angle + 1.57079633))
         image_copy.set_colorkey(self.sprite_info["PLANE_BACKGROUD"])
+
         screen.blit(image_copy, (
             self.position[0] - int(image_copy.get_width() / 2), self.position[1] - int(image_copy.get_height() / 2)))
 
-        # for rct in self.hitboxes_rects:
-        #   pygame.draw.rect(screen, (0, 0, 255), rct["rect"])
         pygame.draw.line(screen, (0, 0, 255), self.position, (
             self.position[0] + math.cos(self.angle) * 50,
             self.position[1] + math.sin(self.angle) * 50
         ))
-        textsurface = myfont.render(f"{self.motor_percentage}", True, (255, 255, 255))
-        screen.blit(textsurface, (SCREENW - textsurface.get_size()[0], 0))
+        done = [20, 0]
+        for GUN in self.guns:
+            textsurface = myfont.render(f"{GUN}: {self.guns[GUN]['RESERVE']}", True, (255, 255, 255))
+            screen.blit(textsurface, (SCREENW - textsurface.get_size()[0], done[1]))
+            done[0] += textsurface.get_size()[0]
+            done[1] += textsurface.get_size()[1]
         pygame.draw.circle(screen, (0, 0, 255), self.position, 3)
 
     def motor(self, doru, dt):
@@ -562,7 +583,7 @@ def update(dt, fps):
             bullets.pop(index)
             continue
         bullet.update(dt)
-        bullet.render(screen)
+        bullet.render()
 
     for pos, i in enumerate(entities):
         i.update(dt)
