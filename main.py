@@ -59,8 +59,8 @@ Prefix R = Ray
 """
 R_LEN = 1000
 R_RANGE = Vector2(-40, 40)
-R_HITBOX_SIZE = 5
-R_DEPTH = 1
+R_HITBOX_SIZE = 50
+R_DEPTH = 15
 
 FREEZE = False
 FREEZE_CD = 0.3
@@ -354,7 +354,7 @@ class Ray:
                 self.origin[0] + (math.cos(self.angle) * length),
                 self.origin[1] + (math.sin(self.angle) * length)
             )
-            pygame.draw.circle(screen, (0, 0, 255), pos, 3)
+            #pygame.draw.circle(screen, (0, 0, 255), pos, R_HITBOX_SIZE)
             if circles_collide(Circle(pos, R_HITBOX_SIZE), p.hitbox):
                 return True
         return False
@@ -410,11 +410,13 @@ class Enemy:
             return
 
         rays: [Ray] = []
+        if distance(self.position[0], player.position[0], self.position[1], player.position[1]) > R_LEN:
+            return
         for i in range(-40, 40, R_DEPTH):
             rays.append(Ray(self.position, self.angle + (i / 100), player))
         for ray in rays:
             if ray.search_for_player():
-                print("Found Player")
+                pygame.draw.line(screen, (0, 255, 0), self.position, player.position, 10)
 
         #raise NotImplementedError("Enemy Function not implemeted")
 
@@ -432,7 +434,7 @@ class Enemy:
         screen.blit(image_copy, (
             self.position[0] - int(image_copy.get_width() / 2), self.position[1] - int(image_copy.get_height() / 2)))
         ent = myfont.render(f"HP: {self.sprite_info['HP']}", True, (255, 255, 255))
-        screen.blit(ent, (self.position.x, self.position.y - 20))
+        screen.blit(ent, (self.position.x - ent.get_width() / 2, self.position.y + 64))
         # self.hitbox.draw()
 
 
@@ -446,7 +448,7 @@ log(LogTypes.INFO, "Player class has been initialized")
 uch_DEBUGGING = GAME_SETTINGS["DEBUGGING"]
 
 for i in range(5):
-    entities.append(Enemy(Vector2(639 + i*128, -466), E_DEFAULT_PLANE))
+    entities.append(Enemy(Vector2(639 + i*192, -466), E_DEFAULT_PLANE))
 
 
 def init():
