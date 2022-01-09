@@ -29,8 +29,8 @@
     "HITBOXES": {
         "MIDDLE": {"BOUNDING_BOX": [32, 32]}
     },
-    "HP": 750,
-    "PLANE_SPEED": 450,
+    "HP": 1500,
+    "PLANE_SPEED": 485,
     "PLANE_FRAME": 1,
     "PLANE_TIMER": 0,
     "PLANE_TIMEOUT": 0.005,

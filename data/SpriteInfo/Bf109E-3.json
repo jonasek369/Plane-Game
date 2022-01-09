@@ -3,12 +3,32 @@
     "DIMENSIONS": [64, 64],
     "FRAMES": 6,
     "GUNS": {
+        "792": {
+            "RATEOFFIRE": 1200,
+            "RESERVE": 2000,
+            "TIMEOUT": 0.05,
+            "LAST_SHOT": 0,
+            "POSITION": [
+                [32, 6],
+                [32, 6]
+            ]
+        },
+        "20": {
+            "RATEOFFIRE": 520,
+            "RESERVE": 120,
+            "TIMEOUT": 0.11,
+            "LAST_SHOT": 0,
+            "POSITION": [
+                [12, 14],
+                [52, 14]
+            ]
+        }
     },
     "HITBOXES": {
         "MIDDLE": {"BOUNDING_BOX": [32, 32]}
     },
-    "HP": 750,
-    "PLANE_SPEED": 485,
+    "HP": 1500,
+    "PLANE_SPEED": 450,
     "PLANE_FRAME": 1,
     "PLANE_TIMER": 0,
     "PLANE_TIMEOUT": 0.005,

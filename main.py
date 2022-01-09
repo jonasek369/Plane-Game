@@ -1,8 +1,6 @@
 import json
 import os
-import sys
 import time
-from dataclasses import dataclass
 from enum import Enum, auto
 
 import pygame
@@ -10,15 +8,21 @@ from win32api import GetSystemMetrics
 
 from data.Scripts.Utils import *
 
-pygame.init()
-pygame.font.init()
-myfont = pygame.font.SysFont('Arial', 24)
-SCREENW, SCREENH = 1920, 1080
-
 WORKING_DIR = os.getcwd()
 assert os.path.exists(
     WORKING_DIR + "\\" + "data"), "Could not file data folder please open exe file in same folder as where is located data folder"
 DATA_DIR = WORKING_DIR + "\\" + "data"
+
+with open(DATA_DIR + "\\Settings\\Game.json", "r") as file:
+    GAME_SETTINGS = json.loads(file.read())
+
+pygame.init()
+pygame.font.init()
+pygame.mixer.pre_init(frequency=44100, size=-16, channels=1, buffer=512)
+pygame.mixer.init()
+
+myfont = pygame.font.SysFont('Arial', 24)
+SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
 
 controls_js = None
 running = True
@@ -27,6 +31,19 @@ clock = pygame.time.Clock()
 
 Vector2 = pygame.math.Vector2
 Vector3 = pygame.math.Vector3
+
+"""
+sound effects
+"""
+
+EXPLOSION = pygame.mixer.Sound(DATA_DIR + "\\Sound\\explosion.wav")
+
+SHOOT = pygame.mixer.Sound(DATA_DIR + "\\Sound\\shoot.wav")
+SHOOT.set_volume(0.5)
+
+HIT = pygame.mixer.Sound(DATA_DIR + "\\Sound\\hit.wav")
+HIT.set_volume(0.6)
+
 
 """
 uch_ prefix means that variable is changeable only by user: user changeable
@@ -42,6 +59,7 @@ BULLET_RADIUS = 2
 entities = []
 bullets = []
 sprite_list = []
+MAP_RECTANGLE = pygame.Rect((-4000 + 0, -4000 + 0), (2000 * 4, 2000 * 4))
 
 C_X = 0
 C_Y = 0
@@ -61,6 +79,7 @@ R_LEN = 1000
 R_RANGE = Vector2(-40, 40)
 R_HITBOX_SIZE = 50
 R_DEPTH = 15
+R_VIEWRANGE = GAME_SETTINGS["R_VIEWRANGE"]
 
 FREEZE = False
 FREEZE_CD = 0.3
@@ -73,7 +92,7 @@ NEEDED_KEYS = {}
 AMMO_INFO = {}
 GAME_SETTINGS = {}
 
-IMPLEMENTED_AMMOTYPES = ["20", "303"]
+IMPLEMENTED_AMMOTYPES = ["20", "303", "792"]
 
 USER_UUID = make_uuid()
 
@@ -88,9 +107,6 @@ assert "KEYS" in NEEDED_KEYS.keys(), "LINE: ~58~ -> Could not load file needed k
 with open(DATA_DIR + "\\Settings\\AmmoTypes.json", "r") as file:
     AMMO_INFO = json.loads(file.read())
 
-with open(DATA_DIR + "\\Settings\\Game.json", "r") as file:
-    GAME_SETTINGS = json.loads(file.read())
-
 for ammotype in IMPLEMENTED_AMMOTYPES:
     assert ammotype in AMMO_INFO, "AmmoTypes.json is not new enough"
 
@@ -100,23 +116,9 @@ else:
     buttons = 3
 
 
-@dataclass
-class LogTypes:
-    """
-    tuple[prefix, color]
-    tuple[str, tuple]
-    """
-    ERROR: tuple[str, tuple] = ("[ERROR]", (255, 0, 0))
-    WARNING: tuple[str, tuple] = ("[WARNING]", (238, 210, 2))
-    INFO: tuple[str, tuple] = ("[INFO]", (173, 216, 230))
-    SUCCESS: tuple[str, tuple] = ("[SUCCESS]", (0, 255, 0))
-
-
 class EnemyState(Enum):
+    PURSUING = auto()
     WONDERING = auto()
-    ATTACKING = auto()
-    IDLING = auto()
-    PERSUING = auto()
 
 
 class Circle:
@@ -147,7 +149,7 @@ class Bullet:
             if circles_collide(i.hitbox, self.hitbox):
                 if self.owner == i.uuid:
                     continue
-                i.get_hit(self.info["DAMAGE"])
+                i.get_hit(self.info["DAMAGE"] / 3 if self.owner != USER_UUID else self.info["DAMAGE"])
                 self.alive = False
         self.position[0] += math.cos(self.angle) * self.info["SPEED"] * dt
         self.position[1] += math.sin(self.angle) * self.info["SPEED"] * dt
@@ -227,6 +229,7 @@ class Player:
                         righty[1] + math.sin(self.angle + (math.pi / 2)) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
                     ]
                     self.guns[ammotype]["RESERVE"] -= 1
+                    SHOOT.play()
                     bullets.append(Bullet(calculate_angle(to_, from_), to_[0], to_[1], ammotype, self.uuid))
 
     def load_sprite_info(self, spi) -> None:
@@ -252,6 +255,7 @@ class Player:
                 self.hitbox = Circle(Vector2(part_bb), 25 * self.sprite_info["PLANE_SCALE"])
 
     def get_hit(self, damage) -> None:
+        print(f"{self.sprite_info['HP']}->{self.sprite_info['HP'] - damage}")
         self.sprite_info["HP"] -= damage
         if self.sprite_info["HP"] <= 0:
             self.alive = False
@@ -354,10 +358,22 @@ class Ray:
                 self.origin[0] + (math.cos(self.angle) * length),
                 self.origin[1] + (math.sin(self.angle) * length)
             )
-            #pygame.draw.circle(screen, (0, 0, 255), pos, R_HITBOX_SIZE)
+            # pygame.draw.circle(screen, (0, 0, 255), pos, R_HITBOX_SIZE)
             if circles_collide(Circle(pos, R_HITBOX_SIZE), p.hitbox):
-                return True
-        return False
+                return True, length, self.angle
+        return False, None, None
+
+    def search_for_all(self):
+        for ent in entities:
+            for length in range(0, R_LEN, (ent.sprite_info["PLANE_SCALE"] * 25)):
+                pos = (
+                    self.origin[0] + (math.cos(self.angle) * length),
+                    self.origin[1] + (math.sin(self.angle) * length)
+                )
+                # pygame.draw.circle(screen, (0, 0, 255), pos, R_HITBOX_SIZE)
+                if circles_collide(Circle(pos, R_HITBOX_SIZE), ent.hitbox):
+                    return True, ent.uuid
+            return False, None
 
 
 class Enemy:
@@ -366,19 +382,63 @@ class Enemy:
         self.alive = True
         self.target = None
         self.uuid = make_uuid()
+        self.motor_percentage = 70
 
         self.angle = math.pi * 1.5
+        self.DESIRED_ANGLE = None
+        self.deltas = [math.cos(self.angle), math.sin(self.angle)]
+        self.angle_to_player = None
+
+        self.target_angle = None
+        self.STATE = EnemyState.WONDERING
         self.guns = {}
         self.hitbox = Circle(self.position, 0)
         self.sprite_info = {"PLANE_TIMER": time.time()}
         self.load_sprite_info(sprite_info)
         self.sprite = pygame.image.load(DATA_DIR + self.sprite_info["SPRITE_LOCATION"]).convert()
         self.spritesheet = SpriteSheet(self.sprite)
+        self.last_from_seen = False
+        self.going = None
+
+    def fire(self) -> None:
+        topleft = [
+            self.position[0] + math.cos(self.angle - 0.78) * (
+                    (self.sprite_info["DIMENSIONS"][0] * self.sprite_info["PLANE_SCALE"]) / 1.41),
+            self.position[1] + math.sin(self.angle - 0.78) * (
+                    (self.sprite_info["DIMENSIONS"][1] * self.sprite_info["PLANE_SCALE"]) / 1.41)
+        ]
+        for ammotype in self.guns:
+            if self.guns[ammotype]["LAST_SHOT"] + self.guns[ammotype]["TIMEOUT"] <= time.time():
+                if self.guns[ammotype]["RESERVE"] <= 0:
+                    continue
+                self.guns[ammotype]["LAST_SHOT"] = time.time()
+                for GUNPOS in self.guns[ammotype]["POSITION"]:
+                    righty = [
+                        topleft[0] + math.cos(self.angle - math.pi) * (GUNPOS[1] * self.sprite_info["PLANE_SCALE"]),
+                        topleft[1] + math.sin(self.angle - math.pi) * (GUNPOS[1] * self.sprite_info["PLANE_SCALE"])]
+                    backer = [
+                        topleft[0] + math.cos(self.angle - math.pi) * (
+                                (GUNPOS[1] - 1) * self.sprite_info["PLANE_SCALE"]),
+                        topleft[1] + math.sin(self.angle - math.pi) * (
+                                (GUNPOS[1] - 1) * self.sprite_info["PLANE_SCALE"])]
+                    from_ = [
+                        backer[0] + math.cos(self.angle + (math.pi / 2)) * (
+                                (GUNPOS[0]) * self.sprite_info["PLANE_SCALE"]),
+                        backer[1] + math.sin(self.angle + (math.pi / 2)) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
+                    ]
+                    to_ = [
+                        righty[0] + math.cos(self.angle + (math.pi / 2)) * (
+                                GUNPOS[0] * self.sprite_info["PLANE_SCALE"]),
+                        righty[1] + math.sin(self.angle + (math.pi / 2)) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
+                    ]
+                    self.guns[ammotype]["RESERVE"] -= 1
+                    SHOOT.play()
+                    bullets.append(Bullet(calculate_angle(to_, from_), to_[0], to_[1], ammotype, self.uuid))
 
     def get_hit(self, damage) -> None:
         self.sprite_info["HP"] -= damage
+        HIT.play()
         if self.sprite_info["HP"] <= 0:
-            print("enemy dead")
             self.alive = False
 
     def update_hitboxes(self) -> None:
@@ -398,8 +458,63 @@ class Enemy:
         self.guns = info["GUNS"]
         self.update_hitboxes()
 
+    def draw_vision_cone(self):
+        if R_VIEWRANGE:
+            pygame.draw.line(screen, (255, 0, 0), self.position, (
+                self.position.x + math.cos(self.angle + (R_RANGE.x / 100)) * R_LEN,
+                self.position.y + math.sin(self.angle + (R_RANGE.x / 100)) * R_LEN
+            ))
+            pygame.draw.line(screen, (255, 0, 0), self.position, (
+                self.position.x + math.cos(self.angle + (R_RANGE.y / 100)) * R_LEN,
+                self.position.y + math.sin(self.angle + (R_RANGE.y / 100)) * R_LEN
+            ))
+            pygame.draw.line(screen, (255, 0, 0), (
+                self.position.x + math.cos(self.angle + (R_RANGE.x / 100)) * R_LEN,
+                self.position.y + math.sin(self.angle + (R_RANGE.x / 100)) * R_LEN
+            ),
+                             (
+                                 self.position.x + math.cos(self.angle + (R_RANGE.y / 100)) * R_LEN,
+                                 self.position.y + math.sin(self.angle + (R_RANGE.y / 100)) * R_LEN
+                             )
+                             )
+
     def update(self, dt):
+        ooc = False
         self.update_hitboxes()
+        self.deltas[0] = math.cos(self.angle)
+        self.deltas[1] = math.sin(self.angle)
+
+        # negate the camera movement
+        self.position[0] += self.deltas[0] * (percentage(self.sprite_info["PLANE_SPEED"], self.motor_percentage)) * dt
+        self.position[1] += self.deltas[1] * (percentage(self.sprite_info["PLANE_SPEED"], self.motor_percentage)) * dt
+
+        if not MAP_RECTANGLE.collidepoint(self.position):
+            self.angle -= ANGLE_ADDER * dt
+            ooc = True
+        for x in range(1):
+            if not ooc and self.DESIRED_ANGLE is not None:
+                if self.angle > self.DESIRED_ANGLE:
+                    if self.going is not None and self.going == True:
+                        self.DESIRED_ANGLE = None
+                        self.going = None
+                        break
+                    self.angle -= ANGLE_ADDER * dt
+                    self.going = False
+                if self.angle < self.DESIRED_ANGLE:
+                    if self.going is not None and self.going == False:
+                        self.DESIRED_ANGLE = None
+                        self.going = None
+                        break
+                    self.angle += ANGLE_ADDER * dt
+                    self.going = True
+
+        # actually moving
+        self.position[0] += self.deltas[0] * (percentage(self.sprite_info["PLANE_SPEED"], self.motor_percentage)) * dt
+        self.position[1] += self.deltas[1] * (percentage(self.sprite_info["PLANE_SPEED"], self.motor_percentage)) * dt
+
+        """
+        Get Player and set it into player variable
+        """
         player = None
         for entity in entities:
             if entity.uuid != USER_UUID:
@@ -409,16 +524,35 @@ class Enemy:
         if player is None or not player.alive:
             return
 
+        """
+        Look for Player
+        """
         rays: [Ray] = []
-        if distance(self.position[0], player.position[0], self.position[1], player.position[1]) > R_LEN:
-            return
-        for i in range(-40, 40, R_DEPTH):
+        # if distance(self.position[0], player.position[0], self.position[1], player.position[1]) > R_LEN + (R_LEN / 4):
+        #     return
+        for i in range(int(R_RANGE.x), int(R_RANGE.y), R_DEPTH):
             rays.append(Ray(self.position, self.angle + (i / 100), player))
+        if R_VIEWRANGE:
+            self.draw_vision_cone()
+        saw_player = False
         for ray in rays:
-            if ray.search_for_player():
-                pygame.draw.line(screen, (0, 255, 0), self.position, player.position, 10)
+            output = ray.search_for_player()
+            if output[0]:
+                saw_player = True
 
-        #raise NotImplementedError("Enemy Function not implemeted")
+        if self.STATE == EnemyState.PURSUING and not saw_player:
+            self.STATE = EnemyState.WONDERING
+            return
+
+        if self.STATE == EnemyState.WONDERING and saw_player:
+            self.STATE = EnemyState.PURSUING
+        if saw_player and not ooc:
+            self.DESIRED_ANGLE = calculate_angle(self.position, player.position)
+        ray = Ray(self.position, self.angle, None)
+        foundsmth, _id = ray.search_for_all()
+        if foundsmth and _id == USER_UUID:
+            SHOOT.play()
+            self.fire()
 
     def render(self):
         if self.sprite_info["PLANE_TIMER"] + self.sprite_info["PLANE_TIMEOUT"] <= time.time():
@@ -430,25 +564,16 @@ class Enemy:
                                          self.sprite_info["DIMENSIONS"][1], self.sprite_info["PLANE_SCALE"])
         image_copy = pygame.transform.rotate(IMG, -math.degrees(self.angle + 1.57079633))
         image_copy.set_colorkey(self.sprite_info["PLANE_BACKGROUD"])
-
         screen.blit(image_copy, (
             self.position[0] - int(image_copy.get_width() / 2), self.position[1] - int(image_copy.get_height() / 2)))
         ent = myfont.render(f"HP: {self.sprite_info['HP']}", True, (255, 255, 255))
         screen.blit(ent, (self.position.x - ent.get_width() / 2, self.position.y + 64))
+        pygame.draw.line(screen, (0, 0, 255), self.position, p.position, 6)
         # self.hitbox.draw()
 
 
-def log(LTYPE, message):
-    prefix, color = LTYPE[0], LTYPE[1]
-    print(colored(color, prefix) + message)
-
-
-log(LogTypes.INFO, "Player class has been initialized")
-
-uch_DEBUGGING = GAME_SETTINGS["DEBUGGING"]
-
-for i in range(5):
-    entities.append(Enemy(Vector2(639 + i*192, -466), E_DEFAULT_PLANE))
+for i in range(1):
+    entities.append(Enemy(Vector2(random.randint(1000, 3000), random.randint(1000, 3000)), E_DEFAULT_PLANE))
 
 
 def init():
@@ -574,21 +699,14 @@ def drawfps(fps):
     screen.blit(fpsmeter, (0, 0))
 
 
-def drawentities(ents):
-    ent = myfont.render(f"entities={len(ents) + len(bullets)}", True, (255, 255, 255))
-    ent_spaceb = myfont.render(f"b={sys.getsizeof(ents) + sys.getsizeof(bullets)}", True, (255, 255, 255))
-    ent_space = myfont.render(f"mb={(sys.getsizeof(ents) + sys.getsizeof(bullets)) / 1024}", True, (255, 255, 255))
-    screen.blit(ent_spaceb, (0, 60))
-    screen.blit(ent_space, (0, 40))
-    screen.blit(ent, (0, 20))
-
-
 trp = pygame.image.load(DATA_DIR + "\\Maps\\Trip.png").convert()
 
 trp = pygame.transform.scale(trp, (2000 * 4, 2000 * 4))
 
 
 def update(dt, fps):
+    global running
+    minimap = pygame.Surface((100, 100))
     controls(dt)
     event_listener()
     for index, bullet in enumerate(bullets):
@@ -599,22 +717,31 @@ def update(dt, fps):
         bullet.render()
 
     for pos, i in enumerate(entities):
+        ent_pos = [
+            get_percentage(8000, (i.position[0] - C_X) + 4000),
+            get_percentage(8000, (i.position[1] - C_Y) + 4000)
+        ]
+        pygame.draw.circle(minimap, (255, 0, 0) if i.uuid != USER_UUID else (0, 255, 0), ent_pos, 3)
         i.update(dt)
         i.render()
         if not i.alive:
+            EXPLOSION.play()
+            print("play")
             entities.pop(pos)
+    if not p.alive:
+        running = False
+    screen.blit(minimap, (0, 0))
     p.update(dt)
-    drawfps(fps)
-    drawentities(entities)
+    # drawfps(fps)
 
 
 def loop():
-    global running
+    global running, MAP_RECTANGLE
     getTicksLastFrame = 0
     while running:
         screen.fill((50, 50, 50))
         screen.blit(trp, (-4000 + C_X, -4000 + C_Y))
-
+        MAP_RECTANGLE = pygame.Rect((-4000 + C_X, -4000 + C_Y), (2000 * 4, 2000 * 4))
         t = pygame.time.get_ticks()
         dt = (t - getTicksLastFrame) / 1000.0
         getTicksLastFrame = t
@@ -622,7 +749,7 @@ def loop():
         update(dt, clock.get_fps())
         clock.tick(0)
         pygame.display.update()
-        # print((p.position[0] - C_X, p.position[1] - C_Y))
+
     pygame.quit()
 
 

@@ -1,3 +1,5 @@
 {
-    "DEBUGGING": true
+    "WIDTH": 1920,
+    "HEIGHT": 1080,
+    "R_VIEWRANGE": false
 }

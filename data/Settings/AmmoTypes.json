@@ -8,5 +8,10 @@
         "DAMAGE": 10,
         "SPEED": 4800,
         "SIZE": 2
+    },
+    "792": {
+        "DAMAGE": 12,
+        "SPEED": 4800,
+        "SIZE": 2
     }
 }
