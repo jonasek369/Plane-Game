@@ -1,0 +1,10 @@
+{
+    "SPRITE_LOCATION": "\\Sprites\\Explosion.png",
+    "DIMENSIONS": [64, 64],
+    "FRAMES": 17,
+    "PLANE_FRAME": 1,
+    "PLANE_TIMER": 0,
+    "PLANE_TIMEOUT": 0.05,
+    "PLANE_BACKGROUD": [0, 0, 255],
+    "PLANE_SCALE": 2
+}

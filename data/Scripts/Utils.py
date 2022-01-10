@@ -1,4 +1,5 @@
 import math
+import os
 import random
 from dataclasses import dataclass
 
@@ -8,6 +9,13 @@ UUID_LENGHT = 16
 UUID_LIST = list("qwertzuiopasdfghjklyxcvbnnmQWERTZUIOPASDFGHJKLYXCVBNM0123456789")
 
 MAP_SIZE = (8000, 8000)
+
+os.system("cls")
+
+# +------------------------------------------------------------+
+# |                Made by Jonáš Erlebach                      |
+# |  Thanks to third party libraries from https://pypi.org/    |
+# +------------------------------------------------------------+
 
 
 def make_uuid():
