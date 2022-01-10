@@ -1,7 +1,7 @@
 {
-    "WIDTH": 1280,
-    "HEIGHT": 720,
-    "R_VIEWRANGE": true,
+    "WIDTH": 1920,
+    "HEIGHT": 1080,
+    "R_VIEWRANGE": false,
     "DRAW_ENEMY_RAY_CIRCLES": false,
     "PlayerPlane": "Spitfire.json",
     "EnemyPlane": "Bf109E-3.json",
@@ -10,5 +10,11 @@
     "R_RANGE": [-40, 40],
     "R_HITBOX_SIZE": 50,
     "R_DEPTH": 15,
-    "DRAW_TRACERS": false
+    "DRAW_TRACERS": false,
+    "VOLUMES": {
+        "EXPLOSION": 0.5,
+        "SHOOT": 0.3,
+        "HIT": 0.5
+    },
+    "ENEMIES": 10
 }

@@ -36,6 +36,8 @@ SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
 controls_js = None
 running = True
 screen = pygame.display.set_mode([SCREENW, SCREENH])
+pygame.display.set_caption("AirWarfare")
+
 clock = pygame.time.Clock()
 
 Vector2 = pygame.math.Vector2
@@ -46,13 +48,13 @@ sound effects
 """
 
 EXPLOSION = pygame.mixer.Sound(DATA_DIR + "\\Sound\\explosion.wav")
-EXPLOSION.set_volume(0)
+EXPLOSION.set_volume(GAME_SETTINGS["VOLUMES"]["EXPLOSION"])
 
 SHOOT = pygame.mixer.Sound(DATA_DIR + "\\Sound\\shoot.wav")
-SHOOT.set_volume(0)
+SHOOT.set_volume(GAME_SETTINGS["VOLUMES"]["SHOOT"])
 
 HIT = pygame.mixer.Sound(DATA_DIR + "\\Sound\\hit.wav")
-HIT.set_volume(0)
+HIT.set_volume(GAME_SETTINGS["VOLUMES"]["HIT"])
 
 """
 uch_ prefix means that variable is changeable only by user: user changeable
@@ -63,17 +65,14 @@ uch_DEBUGGING = False
 FPS = 240
 
 BULLET_LIFETIME = 5
-BULLET_RADIUS = 2
 
 entities = []
 bullets = []
-sprite_list = []
 MAP_RECTANGLE = pygame.Rect((-4000 + 0, -4000 + 0), (2000 * 4, 2000 * 4))
 
 C_X = 0
 C_Y = 0
 
-PLAYERSIZE = 25
 
 """
 Prefix R = Ray
@@ -148,8 +147,7 @@ class Bullet:
     def update(self, dt) -> None:
         if FREEZE:
             return
-        self.hitbox = Circle(self.position, BULLET_RADIUS)
-        self.hitbox.radius = self.info["SIZE"]
+        self.hitbox = Circle(self.position, self.info["SIZE"])
         for i in entities:
             if circles_collide(i.hitbox, self.hitbox):
                 if self.owner == i.uuid:
@@ -282,18 +280,15 @@ class Player:
 
         screen.blit(image_copy, (
             self.position[0] - int(image_copy.get_width() / 2), self.position[1] - int(image_copy.get_height() / 2)))
-        if uch_DEBUGGING:
-            pygame.draw.line(screen, (0, 0, 255), self.position, (
-                self.position[0] + math.cos(self.angle) * 50,
-                self.position[1] + math.sin(self.angle) * 50
-            ))
         done = [20, 0]
         for GUN in self.guns:
             textsurface = myfont.render(f"{GUN}: {self.guns[GUN]['RESERVE']}", True, (255, 255, 255))
             screen.blit(textsurface, (SCREENW - textsurface.get_size()[0], done[1]))
             done[0] += textsurface.get_size()[0]
             done[1] += textsurface.get_size()[1]
-
+        """
+        HP bar
+        """
         hp_perc = get_percentage(self.MAX_HP, self.sprite_info["HP"])
 
         topleft = [
@@ -308,7 +303,7 @@ class Player:
         ]
         pygame.draw.line(screen, (255, 0, 0), botleft, topleft, 5)
 
-        pygame.draw.circle(screen, (0, 0, 255), self.position, 3)
+        # pygame.draw.circle(screen, (0, 0, 255), self.position, 3)
 
     def motor(self, doru, dt) -> None:
         if doru == 1:
@@ -599,7 +594,6 @@ class Enemy:
         ray = Ray(self.position, self.angle, None)
         foundsmth, _id = ray.search_for_all()
         if foundsmth and _id == USER_UUID:
-            SHOOT.play()
             self.fire()
 
     def render(self) -> None:
@@ -637,7 +631,7 @@ class Enemy:
         # self.hitbox.draw()
 
 
-for i in range(10):
+for i in range(GAME_SETTINGS["ENEMIES"]):
     entities.append(
         Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
 
