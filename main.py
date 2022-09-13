@@ -73,7 +73,6 @@ MAP_RECTANGLE = pygame.Rect((-4000 + 0, -4000 + 0), (2000 * 4, 2000 * 4))
 C_X = 0
 C_Y = 0
 
-
 """
 Prefix R = Ray
 """
@@ -762,6 +761,7 @@ def drawfps(fps) -> None:
 trp = pygame.image.load(DATA_DIR + "\\Maps\\BG.png").convert()
 
 trp = pygame.transform.scale(trp, (2000 * 4, 2000 * 4))
+trp_mp = pygame.transform.scale(trp, (100, 100))
 
 
 class Explosion:
@@ -802,7 +802,7 @@ def update(dt, fps) -> None:
     minimap_bg = pygame.Surface((110, 110))
     controls(dt)
     event_listener()
-    minimap.blit(trp, (0, 0))
+    minimap.blit(trp_mp, (0, 0))
     for index, bullet in enumerate(bullets):
         if time.time() - bullet.BORNED >= BULLET_LIFETIME:
             bullets.pop(index)
