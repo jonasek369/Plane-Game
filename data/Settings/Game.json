@@ -17,5 +17,5 @@
         "SHOOT": 0.3,
         "HIT": 0.5
     },
-    "ENEMIES": 3
+    "ENEMIES": 10
 }
