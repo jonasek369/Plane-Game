@@ -3,7 +3,6 @@ import time
 from enum import Enum, auto
 
 import pygame
-from win32api import GetSystemMetrics
 
 from data.Scripts.Utils import *
 
@@ -29,14 +28,23 @@ pygame.font.init()
 pygame.mixer.pre_init(frequency=44100, size=-16, channels=1, buffer=512)
 pygame.mixer.init()
 
-myfont = pygame.font.SysFont('Arial', 24)
-Critical = pygame.font.SysFont("Arial", 40)
+myfont = pygame.font.SysFont('Consolas', 24)
+Critical = pygame.font.SysFont("Consolas", 40)
 SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
 
 controls_js = None
 running = True
-screen = pygame.display.set_mode([SCREENW, SCREENH])
+if GAME_SETTINGS["FULLSCREEN"]:
+    screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE | pygame.FULLSCREEN)
+else:
+    screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE)
 pygame.display.set_caption("AirWarfare")
+try:
+    # set icon
+    icon = pygame.image.load(DATA_DIR + "\\Sprites\\icon.png").convert_alpha()
+    pygame.display.set_icon(icon)
+except Exception as e:
+    log(LogTypes.ERROR, str(e))
 
 clock = pygame.time.Clock()
 
@@ -113,10 +121,7 @@ with open(DATA_DIR + "\\Settings\\AmmoTypes.json", "r") as file:
 for ammotype in IMPLEMENTED_AMMOTYPES:
     assert ammotype in AMMO_INFO, "AmmoTypes.json is not new enough"
 
-if GetSystemMetrics(43) > 3:
-    buttons = 5
-else:
-    buttons = 3
+buttons = None
 
 
 class EnemyState(Enum):
@@ -144,8 +149,6 @@ class Bullet:
         self.owner = owner
 
     def update(self, dt) -> None:
-        if FREEZE:
-            return
         self.hitbox = Circle(self.position, self.info["SIZE"])
         for i in entities:
             if circles_collide(i.hitbox, self.hitbox):
@@ -280,6 +283,10 @@ class Player:
         screen.blit(image_copy, (
             self.position[0] - int(image_copy.get_width() / 2), self.position[1] - int(image_copy.get_height() / 2)))
         done = [20, 0]
+        ammo_label = myfont.render(f"Ammunition", True, (255, 255, 255))
+        screen.blit(ammo_label, (SCREENW - ammo_label.get_size()[0], done[1]))
+        done[0] += ammo_label.get_size()[0]
+        done[1] += ammo_label.get_size()[1]
         for GUN in self.guns:
             textsurface = myfont.render(f"{GUN}: {self.guns[GUN]['RESERVE']}", True, (255, 255, 255))
             screen.blit(textsurface, (SCREENW - textsurface.get_size()[0], done[1]))
@@ -303,6 +310,10 @@ class Player:
         pygame.draw.line(screen, (255, 0, 0), botleft, topleft, 5)
 
         # pygame.draw.circle(screen, (0, 0, 255), self.position, 3)
+
+        # acceleration line
+        pygame.draw.line(screen, (255, 255, 255), (0, SCREENH - 6),
+                         (percentage(SCREENW, self.motor_percentage), SCREENH - 7), 10)
 
     def motor(self, doru, dt) -> None:
         if doru == 1:
@@ -636,6 +647,7 @@ for i in range(GAME_SETTINGS["ENEMIES"]):
 
 
 def init() -> None:
+    global buttons
     """
     innits all the important stuff
     :return: None
@@ -648,14 +660,19 @@ def init() -> None:
     load_controls()
     log(LogTypes.INFO, "Controls loaded")
     log(LogTypes.SUCCESS, "Initialized all needed function!")
+    log(LogTypes.INFO, "Made by Jonáš Erlebach")
+    log(LogTypes.INFO, "Official game page: https://jonasek369.itch.io/airwarfare")
+    buttons = controls_js["mouse_buttons"]
     loop()
 
 
 def event_listener() -> None:
-    global running
+    global running, SCREENW, SCREENH
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        if event.type == pygame.VIDEORESIZE:
+            SCREENW, SCREENH = event.size
 
 
 def controls(dt) -> None:
@@ -747,8 +764,8 @@ def gb_controls() -> None or str:
                 "freeze": {"kc": pygame.K_SPACE}
             },
             "mouse": {
-            }
-
+            },
+            "mouse_buttons": 3
         }
         json.dump(base, file)
 
@@ -796,8 +813,54 @@ class Explosion:
 explosions = []
 
 
+def on_player_death():
+    global p, C_X, C_Y
+    s = pygame.Surface((SCREENW, SCREENH), pygame.SRCALPHA)  # per-pixel alpha
+    s.fill((255, 0, 0, 64))  # notice the alpha value in the color
+    screen.blit(s, (0, 0))
+
+    death_text1 = Critical.render(f"Your plane has been shot down!", True, (255, 0, 0))
+    death_text2 = Critical.render(f"Press R to restart", True, (255, 0, 0))
+    screen.blit(death_text1, (SCREENW // 2 - (death_text1.get_size()[0]) // 2, 0))
+    screen.blit(death_text2, (SCREENW // 2 - (death_text2.get_size()[0]) // 2, death_text1.get_size()[1]))
+
+    if pygame.key.get_pressed()[pygame.K_r]:
+        entities.clear()
+        explosions.clear()
+        C_X = 0
+        C_Y = 0
+        p = Player(GAME_SETTINGS["PlayerPlane"])
+        entities.append(p)
+        for i in range(GAME_SETTINGS["ENEMIES"]):
+            entities.append(
+                Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
+
+
+def on_win():
+    global p, C_X, C_Y
+    s = pygame.Surface((SCREENW, SCREENH), pygame.SRCALPHA)  # per-pixel alpha
+    s.fill((0, 255, 0, 64))  # notice the alpha value in the color
+    screen.blit(s, (0, 0))
+
+    win_text1 = Critical.render(f"You won!", True, (255, 0, 0))
+    win_text2 = Critical.render(f"Press R to restart", True, (255, 0, 0))
+    screen.blit(win_text1, (SCREENW // 2 - (win_text1.get_size()[0]) // 2, 0))
+    screen.blit(win_text2, (SCREENW // 2 - (win_text2.get_size()[0]) // 2, win_text1.get_size()[1]))
+
+    if pygame.key.get_pressed()[pygame.K_r]:
+        entities.clear()
+        explosions.clear()
+        C_X = 0
+        C_Y = 0
+        p = Player(GAME_SETTINGS["PlayerPlane"])
+        entities.append(p)
+        for i in range(GAME_SETTINGS["ENEMIES"]):
+            entities.append(
+                Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
+
+
 def update(dt, fps) -> None:
-    global running
+    global running, FREEZE
     minimap = pygame.Surface((100, 100))
     minimap_bg = pygame.Surface((110, 110))
     controls(dt)
@@ -809,7 +872,6 @@ def update(dt, fps) -> None:
             continue
         bullet.update(dt)
         bullet.render()
-
     for pos, i in enumerate(entities):
         ent_pos = [
             get_percentage(8000, (i.position[0] - C_X) + 4000),
@@ -826,11 +888,19 @@ def update(dt, fps) -> None:
         if not exp.active:
             explosions.pop(pos)
         exp.render()
-    if not p.alive:
-        running = False
-    screen.blit(minimap_bg, (0, 0))
-    screen.blit(minimap, (5, 5))
-    p.update(dt)
+    enemies = entities.copy()
+    try:
+        enemies.remove(p)
+    except ValueError:
+        log(LogTypes.WARNING, "player is not in entity list even though he should be (Player died after win)")
+    if len(enemies) == 0:
+        on_win()
+    elif not p.alive:
+        on_player_death()
+    else:
+        screen.blit(minimap_bg, (0, 0))
+        screen.blit(minimap, (5, 5))
+        p.update(dt)
     # drawfps(fps)
 
 

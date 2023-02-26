@@ -1,6 +1,14 @@
-# Plane-Game 
-[![Total alerts](https://img.shields.io/lgtm/alerts/g/jonasek369/Plane-Game.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/jonasek369/Plane-Game/alerts/)
-[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/jonasek369/Plane-Game.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/jonasek369/Plane-Game/context:python)
+## AirWarfare
+AirWarfare is a 2D plane game made in python using the pygame library.
+I've made this game in a hurry for school presentation. It's not the best and quality of code is debatable.
+I'd love to hear any feedback
 
-Plane game in pygame 
-currently being worked on for school project
+## Itch.io page
+https://jonasek369.itch.io/airwarfare
+
+## Contact details
+discord: jonasek369#4537
+email: jonaserlebach@email.cz
+
+## Known issues
+on window resize player is not centered

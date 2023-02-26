@@ -1,4 +1,5 @@
 {
+    "FULLSCREEN": true,
     "WIDTH": 1920,
     "HEIGHT": 1080,
     "R_VIEWRANGE": false,
@@ -16,5 +17,5 @@
         "SHOOT": 0.3,
         "HIT": 0.5
     },
-    "ENEMIES": 10
+    "ENEMIES": 3
 }

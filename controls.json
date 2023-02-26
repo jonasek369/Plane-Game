@@ -19,5 +19,6 @@
             "kc": 32
         }
     },
-    "mouse": {}
+    "mouse": {},
+    "mouse_buttons": 3
 }
