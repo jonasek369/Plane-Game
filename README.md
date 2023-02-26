@@ -7,7 +7,7 @@ I'd love to hear any feedback
 https://jonasek369.itch.io/airwarfare
 
 ## Contact details
-discord: jonasek369#4537
+discord: jonasek369#4537  
 email: jonaserlebach@email.cz
 
 ## Known issues

@@ -313,7 +313,7 @@ class Player:
 
         # acceleration line
         pygame.draw.line(screen, (255, 255, 255), (0, SCREENH - 6),
-                         (percentage(SCREENW, self.motor_percentage), SCREENH - 7), 10)
+                         (percentage(SCREENW, self.motor_percentage), SCREENH - 6), 10)
 
     def motor(self, doru, dt) -> None:
         if doru == 1:
