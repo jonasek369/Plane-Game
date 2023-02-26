@@ -892,7 +892,7 @@ def update(dt, fps) -> None:
     try:
         enemies.remove(p)
     except ValueError:
-        log(LogTypes.WARNING, "player is not in entity list even though he should be (Player died after win)")
+        pass
     if len(enemies) == 0:
         on_win()
     elif not p.alive:
