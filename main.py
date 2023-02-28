@@ -25,7 +25,7 @@ with open(DATA_DIR + "\\Settings\\Game.json", "r") as file:
 
 pygame.init()
 pygame.font.init()
-pygame.mixer.pre_init(frequency=44100, size=-16, channels=1, buffer=512)
+pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
 pygame.mixer.init()
 
 myfont = pygame.font.SysFont('Consolas', 24)
@@ -64,13 +64,7 @@ SHOOT.set_volume(GAME_SETTINGS["VOLUMES"]["SHOOT"])
 HIT = pygame.mixer.Sound(DATA_DIR + "\\Sound\\hit.wav")
 HIT.set_volume(GAME_SETTINGS["VOLUMES"]["HIT"])
 
-"""
-uch_ prefix means that variable is changeable only by user: user changeable
-"""
-
-uch_DEBUGGING = False
-
-FPS = 240
+FPS_LIMIT = GAME_SETTINGS["FPS_LIMIT"]
 
 BULLET_LIFETIME = 5
 
@@ -122,6 +116,7 @@ for ammotype in IMPLEMENTED_AMMOTYPES:
     assert ammotype in AMMO_INFO, "AmmoTypes.json is not new enough"
 
 buttons = None
+DEBUG = GAME_SETTINGS["DEBUG"]
 
 
 class EnemyState(Enum):
@@ -141,7 +136,7 @@ class Circle:
 class Bullet:
     def __init__(self, angle, startx, starty, _type, owner):
         self.info = AMMO_INFO[_type]
-        self.BORNED = time.time()
+        self.created = time.time()
         self.angle = angle
         self.alive = True
         self.position = [startx, starty]
@@ -269,7 +264,6 @@ class Player:
             self.alive = False
 
     def render(self) -> None:
-        global ang
         if self.sprite_info["PLANE_TIMER"] + self.sprite_info["PLANE_TIMEOUT"] <= time.time():
             self.sprite_info["PLANE_TIMER"] = time.time()
             self.sprite_info["PLANE_FRAME"] += 1
@@ -512,24 +506,21 @@ class Enemy:
         self.update_hitboxes()
 
     def draw_vision_cone(self) -> None:
-        if R_VIEWRANGE:
-            pygame.draw.line(screen, (255, 0, 0), self.position, (
-                self.position.x + math.cos(self.angle + (R_RANGE[0] / 100)) * R_LEN,
-                self.position.y + math.sin(self.angle + (R_RANGE[0] / 100)) * R_LEN
-            ))
-            pygame.draw.line(screen, (255, 0, 0), self.position, (
-                self.position.x + math.cos(self.angle + (R_RANGE[1] / 100)) * R_LEN,
-                self.position.y + math.sin(self.angle + (R_RANGE[1] / 100)) * R_LEN
-            ))
-            pygame.draw.line(screen, (255, 0, 0), (
-                self.position.x + math.cos(self.angle + (R_RANGE[0] / 100)) * R_LEN,
-                self.position.y + math.sin(self.angle + (R_RANGE[0] / 100)) * R_LEN
-            ),
-                             (
-                                 self.position.x + math.cos(self.angle + (R_RANGE[1] / 100)) * R_LEN,
-                                 self.position.y + math.sin(self.angle + (R_RANGE[1] / 100)) * R_LEN
-                             )
-                             )
+        pygame.draw.line(screen, (255, 0, 0), self.position, (
+            self.position.x + math.cos(self.angle + (R_RANGE[0] / 100)) * R_LEN,
+            self.position.y + math.sin(self.angle + (R_RANGE[0] / 100)) * R_LEN
+        ))
+        pygame.draw.line(screen, (255, 0, 0), self.position, (
+            self.position.x + math.cos(self.angle + (R_RANGE[1] / 100)) * R_LEN,
+            self.position.y + math.sin(self.angle + (R_RANGE[1] / 100)) * R_LEN
+        ))
+        pygame.draw.line(screen, (255, 0, 0), (
+            self.position.x + math.cos(self.angle + (R_RANGE[0] / 100)) * R_LEN,
+            self.position.y + math.sin(self.angle + (R_RANGE[0] / 100)) * R_LEN
+        ), (
+                             self.position.x + math.cos(self.angle + (R_RANGE[1] / 100)) * R_LEN,
+                             self.position.y + math.sin(self.angle + (R_RANGE[1] / 100)) * R_LEN
+                         ))
 
     def update(self, dt) -> None:
         ooc = False
@@ -696,7 +687,7 @@ def do_controlaction(function, device, dt) -> None:
     :param dt: float deltaTime
     :return:
     """
-    if function == "freeze":
+    if function == "freeze" and DEBUG:
         if FREEZE_LC + FREEZE_CD < time.time():
             FREEZE = not FREEZE
             FREEZE_LC = time.time()
@@ -770,15 +761,19 @@ def gb_controls() -> None or str:
         json.dump(base, file)
 
 
-def drawfps(fps) -> None:
-    fpsmeter = myfont.render(f"{int(fps)} FPS", True, (255, 255, 255))
-    screen.blit(fpsmeter, (0, 0))
+def draw_debug(fps) -> None:
+    if fps == 0:
+        fps = 1
+    fps_meter = myfont.render(f"{int(fps)} FPS", True, (255, 255, 255))
+    frame_time = myfont.render(f"{round((1 / fps) * 1000, 2)} ms", True, (255, 255, 255))
+    screen.blit(fps_meter, (0, 110))
+    screen.blit(frame_time, (0, 110 + fps_meter.get_height()))
 
 
-trp = pygame.image.load(DATA_DIR + "\\Maps\\BG.png").convert()
+background = pygame.image.load(DATA_DIR + "\\Maps\\BG.png").convert()
 
-trp = pygame.transform.scale(trp, (2000 * 4, 2000 * 4))
-trp_mp = pygame.transform.scale(trp, (100, 100))
+background = pygame.transform.scale(background, (2000 * 4, 2000 * 4))
+background_mp = pygame.transform.scale(background, (100, 100))
 
 
 class Explosion:
@@ -854,7 +849,7 @@ def on_win():
         C_Y = 0
         p = Player(GAME_SETTINGS["PlayerPlane"])
         entities.append(p)
-        for i in range(GAME_SETTINGS["ENEMIES"]):
+        for _ in range(GAME_SETTINGS["ENEMIES"]):
             entities.append(
                 Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
 
@@ -865,29 +860,32 @@ def update(dt, fps) -> None:
     minimap_bg = pygame.Surface((110, 110))
     controls(dt)
     event_listener()
-    minimap.blit(trp_mp, (0, 0))
+    minimap.blit(background_mp, (0, 0))
     for index, bullet in enumerate(bullets):
-        if time.time() - bullet.BORNED >= BULLET_LIFETIME:
+        if time.time() - bullet.created >= BULLET_LIFETIME:
             bullets.pop(index)
             continue
         bullet.update(dt)
         bullet.render()
-    for pos, i in enumerate(entities):
+    for pos, entity in enumerate(entities):
         ent_pos = [
-            get_percentage(8000, (i.position[0] - C_X) + 4000),
-            get_percentage(8000, (i.position[1] - C_Y) + 4000)
+            get_percentage(8000, (entity.position[0] - C_X) + 4000),
+            get_percentage(8000, (entity.position[1] - C_Y) + 4000)
         ]
-        pygame.draw.circle(minimap, (255, 0, 0) if i.uuid != USER_UUID else (0, 255, 0), ent_pos, 3)
-        i.update(dt)
-        i.render()
-        if not i.alive:
-            explosions.append(Explosion(GAME_SETTINGS["ExplosionSprite"], i.position))
-            EXPLOSION.play()
+        pygame.draw.circle(minimap, (255, 0, 0) if entity.uuid != USER_UUID else (0, 255, 0), ent_pos, 3)
+        entity.update(dt)
+        entity.render()
+        if not entity.alive:
+            explosions.append(Explosion(GAME_SETTINGS["ExplosionSprite"], entity.position))
+            # For some reason sometimes .play() return None channel and doesn't play audio
+            # This causes stutter but it will ensure that the sound is played (also explosion is less usual than others)
+            while channel := EXPLOSION.play() is None:
+                continue
             entities.pop(pos)
-    for pos, exp in enumerate(explosions):
-        if not exp.active:
+    for pos, explosion in enumerate(explosions):
+        if not explosion.active:
             explosions.pop(pos)
-        exp.render()
+        explosion.render()
     enemies = entities.copy()
     try:
         enemies.remove(p)
@@ -901,7 +899,8 @@ def update(dt, fps) -> None:
         screen.blit(minimap_bg, (0, 0))
         screen.blit(minimap, (5, 5))
         p.update(dt)
-    # drawfps(fps)
+    if DEBUG:
+        draw_debug(fps)
 
 
 def loop() -> None:
@@ -909,14 +908,14 @@ def loop() -> None:
     getTicksLastFrame = 0
     while running:
         screen.fill((50, 50, 50))
-        screen.blit(trp, (-4000 + C_X, -4000 + C_Y))
+        screen.blit(background, (-4000 + C_X, -4000 + C_Y))
         MAP_RECTANGLE = pygame.Rect((-4000 + C_X, -4000 + C_Y), (2000 * 4, 2000 * 4))
         t = pygame.time.get_ticks()
         dt = (t - getTicksLastFrame) / 1000.0
         getTicksLastFrame = t
 
         update(dt, clock.get_fps())
-        clock.tick(0)
+        clock.tick(FPS_LIMIT)
         pygame.display.update()
 
     pygame.quit()
