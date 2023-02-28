@@ -124,6 +124,8 @@ class EnemyState(Enum):
     WONDERING = auto()
 
 
+
+
 class Circle:
     def __init__(self, pos, radius):
         self.pos = Vector2(pos)
@@ -233,7 +235,7 @@ class Player:
                         righty[1] + math.sin(self.angle + (math.pi / 2)) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
                     ]
                     self.guns[ammotype]["RESERVE"] -= 1
-                    SHOOT.play()
+                    pygame.mixer.Channel(2).play(SHOOT)
                     bullets.append(Bullet(calculate_angle(to_, from_), to_[0], to_[1], ammotype, self.uuid))
 
     def load_sprite_info(self, spi) -> None:
@@ -479,12 +481,12 @@ class Enemy:
                         righty[1] + math.sin(self.angle + (math.pi / 2)) * (GUNPOS[0] * self.sprite_info["PLANE_SCALE"])
                     ]
                     self.guns[ammotype]["RESERVE"] -= 1
-                    SHOOT.play()
+                    pygame.mixer.Channel(2).play(SHOOT)
                     bullets.append(Bullet(calculate_angle(to_, from_), to_[0], to_[1], ammotype, self.uuid))
 
     def get_hit(self, damage) -> None:
         self.sprite_info["HP"] -= damage
-        HIT.play()
+        pygame.mixer.Channel(1).play(HIT)
         if self.sprite_info["HP"] <= 0:
             self.alive = False
 
@@ -877,10 +879,7 @@ def update(dt, fps) -> None:
         entity.render()
         if not entity.alive:
             explosions.append(Explosion(GAME_SETTINGS["ExplosionSprite"], entity.position))
-            # For some reason sometimes .play() return None channel and doesn't play audio
-            # This causes stutter but it will ensure that the sound is played (also explosion is less usual than others)
-            while channel := EXPLOSION.play() is None:
-                continue
+            pygame.mixer.Channel(0).play(EXPLOSION)
             entities.pop(pos)
     for pos, explosion in enumerate(explosions):
         if not explosion.active:
@@ -917,7 +916,6 @@ def loop() -> None:
         update(dt, clock.get_fps())
         clock.tick(FPS_LIMIT)
         pygame.display.update()
-
     pygame.quit()
 
 
