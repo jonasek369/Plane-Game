@@ -1,4 +1,5 @@
 import json
+import sys
 import time
 from enum import Enum, auto
 
@@ -88,8 +89,6 @@ R_VIEWRANGE = GAME_SETTINGS["R_VIEWRANGE"]
 R_DRAW_CIRCLES = GAME_SETTINGS["DRAW_ENEMY_RAY_CIRCLES"]
 
 FREEZE = False
-FREEZE_CD = 0.3
-FREEZE_LC = 0
 
 ANGLE_ADDER = 1.75
 MOTOR_MINUSER = 50
@@ -118,12 +117,39 @@ for ammotype in IMPLEMENTED_AMMOTYPES:
 buttons = None
 DEBUG = GAME_SETTINGS["DEBUG"]
 
+# variables for menu
+SCREEN_BUFFER = pygame.Surface(screen.get_size())
+IN_MENU = True
+MENU_STATE = 0
+
+IN_MENU_CD = 0.2
+IN_MENU_LC = time.time()
+TRANSPARENT_LAYER = pygame.Surface((SCREENW, SCREENH))
+
+
+def applay_changes():
+    global FPS_LIMIT, R_LEN, R_RANGE, R_HITBOX_SIZE, R_DEPTH, DRAW_TRACERS, R_VIEWRANGE, R_DRAW_CIRCLES, DEBUG, SCREENW, SCREENH, screen, MENU_STATE
+    SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
+    if GAME_SETTINGS["FULLSCREEN"]:
+        screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE | pygame.FULLSCREEN)
+    else:
+        screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE)
+    FPS_LIMIT = GAME_SETTINGS["FPS_LIMIT"]
+    R_LEN = GAME_SETTINGS["R_LEN"]
+    R_RANGE = GAME_SETTINGS["R_RANGE"]
+    R_HITBOX_SIZE = GAME_SETTINGS["R_HITBOX_SIZE"]
+    R_DEPTH = GAME_SETTINGS["R_DEPTH"]
+    DRAW_TRACERS = GAME_SETTINGS["DRAW_TRACERS"]
+    R_VIEWRANGE = GAME_SETTINGS["R_VIEWRANGE"]
+    R_DRAW_CIRCLES = GAME_SETTINGS["DRAW_ENEMY_RAY_CIRCLES"]
+    DEBUG = GAME_SETTINGS["DEBUG"]
+
+    MENU_STATE = 0
+
 
 class EnemyState(Enum):
     PURSUING = auto()
     WONDERING = auto()
-
-
 
 
 class Circle:
@@ -147,17 +173,16 @@ class Bullet:
 
     def update(self, dt) -> None:
         self.hitbox = Circle(self.position, self.info["SIZE"])
-        for i in entities:
-            if circles_collide(i.hitbox, self.hitbox):
-                if self.owner == i.uuid:
+        for entity in entities:
+            if circles_collide(entity.hitbox, self.hitbox):
+                if self.owner == entity.uuid:
                     continue
-                i.get_hit(self.info["DAMAGE"] / 3 if self.owner != USER_UUID else self.info["DAMAGE"])
+                entity.get_hit(self.info["DAMAGE"] / 3 if self.owner != USER_UUID else self.info["DAMAGE"])
                 self.alive = False
         self.position[0] += math.cos(self.angle) * self.info["SPEED"] * dt
         self.position[1] += math.sin(self.angle) * self.info["SPEED"] * dt
 
     def render(self) -> None:
-        global drawing
         self.hitbox.draw()
 
 
@@ -288,9 +313,8 @@ class Player:
             screen.blit(textsurface, (SCREENW - textsurface.get_size()[0], done[1]))
             done[0] += textsurface.get_size()[0]
             done[1] += textsurface.get_size()[1]
-        """
-        HP bar
-        """
+
+        # HP bar
         hp_perc = get_percentage(self.MAX_HP, self.sprite_info["HP"])
 
         topleft = [
@@ -304,8 +328,6 @@ class Player:
                                           hp_perc)
         ]
         pygame.draw.line(screen, (255, 0, 0), botleft, topleft, 5)
-
-        # pygame.draw.circle(screen, (0, 0, 255), self.position, 3)
 
         # acceleration line
         pygame.draw.line(screen, (255, 255, 255), (0, SCREENH - 6),
@@ -391,6 +413,12 @@ class Player:
 
 p = Player(GAME_SETTINGS["PlayerPlane"])
 entities.append(p)
+
+
+def player_alive():
+    if p is not None:
+        return p in entities
+    return False
 
 
 class Ray:
@@ -574,8 +602,10 @@ class Enemy:
         Look for Player
         """
         rays: [Ray] = []
-        # if distance(self.position[0], player.position[0], self.position[1], player.position[1]) > R_LEN + (R_LEN / 4):
-        #     return
+        # if enemy's distance between him and player is greater than R_LEN + (R_LEN / 4) Ignore
+        # mayor performance improvements for non stacked enemies
+        if distance(self.position[0], player.position[0], self.position[1], player.position[1]) > R_LEN + (R_LEN / 4):
+            return
         for i in range(int(R_RANGE[0]), int(R_RANGE[1]), R_DEPTH):
             rays.append(Ray(self.position, self.angle + (i / 100), player))
         if R_VIEWRANGE:
@@ -598,6 +628,7 @@ class Enemy:
         foundsmth, _id = ray.search_for_all()
         if foundsmth and _id == USER_UUID:
             self.fire()
+        self.render()
 
     def render(self) -> None:
         if self.sprite_info["PLANE_TIMER"] + self.sprite_info["PLANE_TIMEOUT"] <= time.time():
@@ -660,12 +691,14 @@ def init() -> None:
 
 
 def event_listener() -> None:
-    global running, SCREENW, SCREENH
+    global running, SCREENW, SCREENH, SCREEN_BUFFER, TRANSPARENT_LAYER
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         if event.type == pygame.VIDEORESIZE:
             SCREENW, SCREENH = event.size
+            TRANSPARENT_LAYER = pygame.transform.scale(TRANSPARENT_LAYER, (SCREENW, SCREENH))
+            SCREEN_BUFFER = pygame.transform.scale(SCREEN_BUFFER, (SCREENW, SCREENH))
 
 
 def controls(dt) -> None:
@@ -682,19 +715,31 @@ def controls(dt) -> None:
 
 
 def do_controlaction(function, device, dt) -> None:
-    global FREEZE, FREEZE_LC
+    global FREEZE, IN_MENU, IN_MENU_CD, IN_MENU_LC, MENU_STATE
     """
     :param function: str function name
     :param device: bool, T = Keyboard, F = Mouse
     :param dt: float deltaTime
     :return:
     """
-    if function == "freeze" and DEBUG:
-        if FREEZE_LC + FREEZE_CD < time.time():
-            FREEZE = not FREEZE
-            FREEZE_LC = time.time()
-    if FREEZE:
+    # do not affect game when in menu
+    if IN_MENU:
+        if IN_MENU_LC + IN_MENU_CD < time.time() and function == "menu":
+            if MENU_STATE == 1:
+                MENU_STATE = 0
+                IN_MENU_LC = time.time()
+                return
+            IN_MENU = False
+            IN_MENU_LC = time.time()
         return
+
+    if IN_MENU_LC + IN_MENU_CD < time.time() and function == "menu":
+        IN_MENU = True
+        IN_MENU_LC = time.time()
+
+    if FREEZE or not player_alive():
+        return
+
     if device:
         if function == "motor_up":
             p.motor(1, dt)
@@ -741,7 +786,7 @@ def load_controls() -> None:
 
 def gb_controls() -> None or str:
     """
-    generates base controls.json file that can be edited afterwards
+    genes base controls.json file that can be edited afterwards
     :return:
     """
     if os.path.exists("controls.json"):
@@ -754,7 +799,7 @@ def gb_controls() -> None or str:
                 "motor_up": {"kc": pygame.K_w},
                 "motor_down": {"kc": pygame.K_s},
                 "fire": {"kc": pygame.K_e},
-                "freeze": {"kc": pygame.K_SPACE}
+                "menu": {"kc": pygame.K_ESCAPE}
             },
             "mouse": {
             },
@@ -774,8 +819,12 @@ def draw_debug(fps) -> None:
 
 background = pygame.image.load(DATA_DIR + "\\Maps\\BG.png").convert()
 
+SCREEN_BUFFER = pygame.transform.scale(background, [SCREENW, SCREENH])
+
 background = pygame.transform.scale(background, (2000 * 4, 2000 * 4))
 background_mp = pygame.transform.scale(background, (100, 100))
+
+
 
 
 class Explosion:
@@ -876,7 +925,9 @@ def update(dt, fps) -> None:
         ]
         pygame.draw.circle(minimap, (255, 0, 0) if entity.uuid != USER_UUID else (0, 255, 0), ent_pos, 3)
         entity.update(dt)
-        entity.render()
+        # iam calling render in update (accidentally rendering twice every entity)
+        # keeping if I have any problem later
+        # entity.render()
         if not entity.alive:
             explosions.append(Explosion(GAME_SETTINGS["ExplosionSprite"], entity.position))
             pygame.mixer.Channel(0).play(EXPLOSION)
@@ -902,19 +953,255 @@ def update(dt, fps) -> None:
         draw_debug(fps)
 
 
-def loop() -> None:
-    global running, MAP_RECTANGLE
-    getTicksLastFrame = 0
-    while running:
-        screen.fill((50, 50, 50))
-        screen.blit(background, (-4000 + C_X, -4000 + C_Y))
-        MAP_RECTANGLE = pygame.Rect((-4000 + C_X, -4000 + C_Y), (2000 * 4, 2000 * 4))
-        t = pygame.time.get_ticks()
-        dt = (t - getTicksLastFrame) / 1000.0
-        getTicksLastFrame = t
+def on_click_start():
+    global IN_MENU
+    IN_MENU = not IN_MENU
 
-        update(dt, clock.get_fps())
-        clock.tick(FPS_LIMIT)
+
+def on_click_settings():
+    global MENU_STATE
+    MENU_STATE = 1
+
+
+class Element:
+    pass
+
+
+class Button(Element):
+    def __init__(self, percentage_position, size, text, font_renderer, callback):
+        self.perc_position = percentage_position
+        self.size = size
+        self.cb = callback
+        self.centered = True
+        self.frenderer: pygame.font.SysFont = font_renderer
+        self.text = text
+
+    def update(self):
+        if self.centered:
+            x = percentage(SCREENW, self.perc_position[0]) - self.size[0] / 2
+            y = percentage(SCREENH, self.perc_position[1]) - self.size[1] / 2
+        else:
+            x = percentage(SCREENW, self.perc_position[0])
+            y = percentage(SCREENH, self.perc_position[1])
+        rect = pygame.Rect((x, y), self.size)
+
+        if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0]:
+            self.cb()
+
+    def render(self):
+        if self.centered:
+            x = percentage(SCREENW, self.perc_position[0]) - (self.size[0] / 2)
+            y = percentage(SCREENH, self.perc_position[1]) - (self.size[1] / 2)
+        else:
+            x = percentage(SCREENW, self.perc_position[0])
+            y = percentage(SCREENH, self.perc_position[1])
+        text = self.frenderer.render(self.text, True, (0, 0, 0))
+        rect = pygame.Rect((x, y), self.size)
+        text_rect = text.get_rect(center=(rect.centerx, rect.centery))
+
+        pygame.draw.rect(screen, (255, 255, 255), rect)
+        screen.blit(text, text_rect)
+
+
+class Switch(Element):
+    def __init__(self, percentage_position, size, update_var_name, cooldown=0.15):
+        self.perc_position = percentage_position
+        self.size = [size, size]
+        self.centered = True
+        self.update_var_name = update_var_name
+        self.cooldown = cooldown
+
+        self.__last_use = time.time()
+
+    def update(self):
+        if self.centered:
+            x = percentage(SCREENW, self.perc_position[0]) - self.size[0] / 2
+            y = percentage(SCREENH, self.perc_position[1]) - self.size[1] / 2
+        else:
+            x = percentage(SCREENW, self.perc_position[0])
+            y = percentage(SCREENH, self.perc_position[1])
+        rect = pygame.Rect((x, y), self.size)
+
+        if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
+            0] and time.time() - self.__last_use >= self.cooldown:
+            self.__last_use = time.time()
+            GAME_SETTINGS[self.update_var_name] = not GAME_SETTINGS[self.update_var_name]
+
+    def render(self):
+        if self.centered:
+            x = percentage(SCREENW, self.perc_position[0]) - self.size[0] / 2
+            y = percentage(SCREENH, self.perc_position[1]) - self.size[1] / 2
+        else:
+            x = percentage(SCREENW, self.perc_position[0])
+            y = percentage(SCREENH, self.perc_position[1])
+        rect = pygame.Rect((x, y), self.size)
+
+        if GAME_SETTINGS[self.update_var_name]:
+            pygame.draw.rect(screen, (0, 255, 0), rect)
+        else:
+            pygame.draw.rect(screen, (255, 0, 0), rect)
+
+
+class ValueCircler(Element):
+    def __init__(self, percentage_position, size, font_renderer, update_var_name, circled_values, cooldown=0.15):
+        self.perc_position = percentage_position
+        self.size = size
+        self.centered = True
+        self.frenderer: pygame.font.SysFont = font_renderer
+        self.update_var_name = update_var_name
+
+        self.values = circled_values
+        self.index = 0
+
+        self.cooldown = cooldown
+
+        self.__last_use = time.time()
+
+    def update(self):
+        if self.centered:
+            x = percentage(SCREENW, self.perc_position[0]) - self.size[0] / 2
+            y = percentage(SCREENH, self.perc_position[1]) - self.size[1] / 2
+        else:
+            x = percentage(SCREENW, self.perc_position[0])
+            y = percentage(SCREENH, self.perc_position[1])
+        rect = pygame.Rect((x, y), self.size)
+
+        if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0] and time.time() - self.__last_use >= self.cooldown:
+            self.__last_use = time.time()
+            if self.index + 1 >= len(self.values):
+                self.index = 0
+            else:
+                self.index += 1
+
+        if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[2] and time.time() - self.__last_use >= self.cooldown:
+            self.__last_use = time.time()
+            if self.index - 1 < 0:
+                self.index = len(self.values) - 1
+            else:
+                self.index -= 1
+
+        GAME_SETTINGS[self.update_var_name] = self.values[self.index]
+
+    def render(self):
+        if self.centered:
+            x = percentage(SCREENW, self.perc_position[0]) - (self.size[0] / 2)
+            y = percentage(SCREENH, self.perc_position[1]) - (self.size[1] / 2)
+        else:
+            x = percentage(SCREENW, self.perc_position[0])
+            y = percentage(SCREENH, self.perc_position[1])
+        text = self.frenderer.render(str(self.values[self.index]), True, (0, 0, 0))
+        rect = pygame.Rect((x, y), self.size)
+        text_rect = text.get_rect(center=(rect.centerx, rect.centery))
+
+        pygame.draw.rect(screen, (255, 255, 255), rect)
+        screen.blit(text, text_rect)
+
+
+class Label(Element):
+    def __init__(self, percentage_position, text, font_renderer):
+        self.perc_position = percentage_position
+
+        self.centered = True
+        self.frenderer: pygame.font.SysFont = font_renderer
+        self.text = text
+
+    def update(self):
+        pass
+
+    def render(self):
+        x = percentage(SCREENW, self.perc_position[0])
+        y = percentage(SCREENH, self.perc_position[1])
+        text = self.frenderer.render(self.text, True, (0, 0, 0))
+        screen.blit(text, [x, y])
+
+
+menu_font = pygame.font.SysFont("consolas", 24)
+
+
+class Gui:
+    def __init__(self, elements):
+        self.elements = elements
+        for i in self.elements:
+            assert isinstance(i, Element)
+
+    def render(self):
+        for element in self.elements:
+            element.update()
+            element.render()
+
+
+menu = Gui([
+    Button([50, 30], [150, 70], "Start", menu_font, on_click_start),
+    Button([50, 50], [150, 70], "Settings", menu_font, on_click_settings),
+    Button([50, 70], [150, 70], "Exit", menu_font, sys.exit)
+])
+
+settings = Gui([
+    Label([30, 8], "fps limit", menu_font),
+    ValueCircler([50, 10], [150, 70], menu_font, "FPS_LIMIT", [0, 30, 60, 144, 244, 360]),
+    Label([30, 20], "fullscreen", menu_font),
+    Switch([50, 20], 50, "FULLSCREEN"),
+    Button([80, 80], [150, 70], "Apply", menu_font, applay_changes)
+])
+
+
+def draw1010grid():
+    for x in range(0, SCREENW, 10):
+        pygame.draw.line(screen, (0, 0, 0), (x, 0), (x, SCREENH))
+    for y in range(0, SCREENH, 10):
+        pygame.draw.line(screen, (0, 0, 0), (0, y), (SCREENW, y))
+
+
+def blurSurf(surface, amt):
+    """
+    Blur the given surface by the given 'amount'.  Only values 1 and greater
+    are valid.  Value 1 = no blur.
+    """
+    if amt < 1.0:
+        raise ValueError("Arg 'amt' must be greater than 1.0, passed in value is %s" % amt)
+    scale = 1.0 / float(amt)
+    surf_size = surface.get_size()
+    scale_size = (int(surf_size[0] * scale), int(surf_size[1] * scale))
+    surf = pygame.transform.smoothscale(surface, scale_size)
+    surf = pygame.transform.smoothscale(surf, surf_size)
+    return surf
+
+
+def loop() -> None:
+    global running, MAP_RECTANGLE, SCREEN_BUFFER, IN_MENU, TRANSPARENT_LAYER
+    getTicksLastFrame = 0
+    from_game_switch = False
+    TRANSPARENT_LAYER.set_alpha(128)  # alpha level
+    TRANSPARENT_LAYER.fill((255, 255, 255))
+    while running:
+        if not IN_MENU:
+            screen.fill((50, 50, 50))
+            from_game_switch = True
+            screen.blit(background, (-4000 + C_X, -4000 + C_Y))
+            MAP_RECTANGLE = pygame.Rect((-4000 + C_X, -4000 + C_Y), (2000 * 4, 2000 * 4))
+            t = pygame.time.get_ticks()
+            dt = (t - getTicksLastFrame) / 1000.0
+            getTicksLastFrame = t
+            update(dt, clock.get_fps())
+            clock.tick(FPS_LIMIT)
+        elif IN_MENU:
+            event_listener()
+            getTicksLastFrame = pygame.time.get_ticks()
+            if from_game_switch:
+                SCREEN_BUFFER = blurSurf(screen.copy(), 20)
+                from_game_switch = False
+            controls(0)
+            # MENU HERE
+            if MENU_STATE == 0:
+                screen.blit(SCREEN_BUFFER, (0, 0))
+                screen.blit(TRANSPARENT_LAYER, (0, 0))
+                menu.render()
+            # CONTROLS
+            elif MENU_STATE == 1:
+                screen.blit(SCREEN_BUFFER, (0, 0))
+                screen.blit(TRANSPARENT_LAYER, (0, 0))
+                settings.render()
+            clock.tick(60)
         pygame.display.update()
     pygame.quit()
 

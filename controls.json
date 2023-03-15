@@ -15,8 +15,8 @@
         "fire": {
             "kc": 101
         },
-        "freeze": {
-            "kc": 32
+        "menu": {
+            "kc": 27
         }
     },
     "mouse": {},
