@@ -33,7 +33,7 @@ myfont = pygame.font.SysFont('Consolas', 24)
 Critical = pygame.font.SysFont("Consolas", 40)
 SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
 
-controls_js = None
+controls_js: dict = None
 running = True
 if GAME_SETTINGS["FULLSCREEN"]:
     screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE | pygame.FULLSCREEN)
@@ -114,7 +114,7 @@ with open(DATA_DIR + "\\Settings\\AmmoTypes.json", "r") as file:
 for ammotype in IMPLEMENTED_AMMOTYPES:
     assert ammotype in AMMO_INFO, "AmmoTypes.json is not new enough"
 
-buttons = None
+buttons = 3
 DEBUG = GAME_SETTINGS["DEBUG"]
 
 # variables for menu
@@ -127,7 +127,7 @@ IN_MENU_LC = time.time()
 TRANSPARENT_LAYER = pygame.Surface((SCREENW, SCREENH))
 
 
-def applay_changes():
+def apply_changes():
     global FPS_LIMIT, R_LEN, R_RANGE, R_HITBOX_SIZE, R_DEPTH, DRAW_TRACERS, R_VIEWRANGE, R_DRAW_CIRCLES, DEBUG, SCREENW, SCREENH, screen, MENU_STATE
     SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
     if GAME_SETTINGS["FULLSCREEN"]:
@@ -691,11 +691,15 @@ def init() -> None:
 
 
 def event_listener() -> None:
-    global running, SCREENW, SCREENH, SCREEN_BUFFER, TRANSPARENT_LAYER
+    global running, SCREENW, SCREENH, SCREEN_BUFFER, TRANSPARENT_LAYER, C_X, C_Y
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         if event.type == pygame.VIDEORESIZE:
+            # offsets the player position with videoresize
+            p.position[0] += (event.size[0] - SCREENW) / 2
+            p.position[1] += (event.size[1] - SCREENH) / 2
+
             SCREENW, SCREENH = event.size
             TRANSPARENT_LAYER = pygame.transform.scale(TRANSPARENT_LAYER, (SCREENW, SCREENH))
             SCREEN_BUFFER = pygame.transform.scale(SCREEN_BUFFER, (SCREENW, SCREENH))
@@ -819,12 +823,11 @@ def draw_debug(fps) -> None:
 
 background = pygame.image.load(DATA_DIR + "\\Maps\\BG.png").convert()
 
+# TODO: Change this to something normal this is now just and placeholder so the background isnt gray on first start
 SCREEN_BUFFER = pygame.transform.scale(background, [SCREENW, SCREENH])
 
 background = pygame.transform.scale(background, (2000 * 4, 2000 * 4))
 background_mp = pygame.transform.scale(background, (100, 100))
-
-
 
 
 class Explosion:
@@ -1066,14 +1069,16 @@ class ValueCircler(Element):
             y = percentage(SCREENH, self.perc_position[1])
         rect = pygame.Rect((x, y), self.size)
 
-        if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0] and time.time() - self.__last_use >= self.cooldown:
+        if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
+            0] and time.time() - self.__last_use >= self.cooldown:
             self.__last_use = time.time()
             if self.index + 1 >= len(self.values):
                 self.index = 0
             else:
                 self.index += 1
 
-        if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[2] and time.time() - self.__last_use >= self.cooldown:
+        if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
+            2] and time.time() - self.__last_use >= self.cooldown:
             self.__last_use = time.time()
             if self.index - 1 < 0:
                 self.index = len(self.values) - 1
@@ -1141,7 +1146,7 @@ settings = Gui([
     ValueCircler([50, 10], [150, 70], menu_font, "FPS_LIMIT", [0, 30, 60, 144, 244, 360]),
     Label([30, 20], "fullscreen", menu_font),
     Switch([50, 20], 50, "FULLSCREEN"),
-    Button([80, 80], [150, 70], "Apply", menu_font, applay_changes)
+    Button([80, 80], [150, 70], "Apply", menu_font, apply_changes)
 ])
 
 

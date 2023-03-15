@@ -10,5 +10,5 @@ https://jonasek369.itch.io/airwarfare
 discord: jonasek369#4537  
 email: jonaserlebach@email.cz
 
-## Known issues
-on window resize player is not centered
+## Known issues (and status)
+- [x] on window resize player is not centered
