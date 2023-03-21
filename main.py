@@ -18,7 +18,8 @@ os.system("cls")
 
 WORKING_DIR = os.getcwd()
 assert os.path.exists(
-    WORKING_DIR + "\\" + "data"), "Could not file data folder please open exe file in same folder as where is located data folder"
+    WORKING_DIR + "\\" + "data"), "Could not file data folder please open exe file in same folder as where is located " \
+                                  "data folder "
 DATA_DIR = WORKING_DIR + "\\" + "data"
 
 with open(DATA_DIR + "\\Settings\\Game.json", "r") as file:
@@ -33,7 +34,7 @@ myfont = pygame.font.SysFont('Consolas', 24)
 Critical = pygame.font.SysFont("Consolas", 40)
 SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
 
-controls_js: dict = None
+controls_js: dict = {}
 running = True
 if GAME_SETTINGS["FULLSCREEN"]:
     screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE | pygame.FULLSCREEN)
@@ -125,6 +126,11 @@ MENU_STATE = 0
 IN_MENU_CD = 0.2
 IN_MENU_LC = time.time()
 TRANSPARENT_LAYER = pygame.Surface((SCREENW, SCREENH))
+
+SWICH_TRUE = pygame.image.load(DATA_DIR + "\\Sprites\\true.png").convert_alpha()
+SWITCH_FALSE = pygame.image.load(DATA_DIR + "\\Sprites\\false.png").convert_alpha()
+
+BUT_TEXTURE = pygame.image.load(DATA_DIR + "\\Sprites\\circler.png").convert_alpha()
 
 
 def apply_changes():
@@ -744,17 +750,16 @@ def do_controlaction(function, device, dt) -> None:
     if FREEZE or not player_alive():
         return
 
-    if device:
-        if function == "motor_up":
-            p.motor(1, dt)
-        if function == "left":
-            p.move(1, dt)
-        if function == "motor_down":
-            p.motor(0, dt)
-        if function == "right":
-            p.move(3, dt)
-        if function == "fire":
-            p.fire()
+    if function == "motor_up":
+        p.motor(1, dt)
+    if function == "left":
+        p.move(1, dt)
+    if function == "motor_down":
+        p.motor(0, dt)
+    if function == "right":
+        p.move(3, dt)
+    if function == "fire":
+        p.fire()
 
 
 def is_down(kc) -> bool:
@@ -805,8 +810,7 @@ def gb_controls() -> None or str:
                 "fire": {"kc": pygame.K_e},
                 "menu": {"kc": pygame.K_ESCAPE}
             },
-            "mouse": {
-            },
+            "mouse": {},
             "mouse_buttons": 3
         }
         json.dump(base, file)
@@ -978,6 +982,7 @@ class Button(Element):
         self.centered = True
         self.frenderer: pygame.font.SysFont = font_renderer
         self.text = text
+        self.TEXTURE = pygame.transform.scale(BUT_TEXTURE, self.size)
 
     def update(self):
         if self.centered:
@@ -1002,12 +1007,12 @@ class Button(Element):
         rect = pygame.Rect((x, y), self.size)
         text_rect = text.get_rect(center=(rect.centerx, rect.centery))
 
-        pygame.draw.rect(screen, (255, 255, 255), rect)
+        screen.blit(self.TEXTURE, rect.topleft)
         screen.blit(text, text_rect)
 
 
 class Switch(Element):
-    def __init__(self, percentage_position, size, update_var_name, cooldown=0.15):
+    def __init__(self, percentage_position, size, update_var_name, cooldown=0.3):
         self.perc_position = percentage_position
         self.size = [size, size]
         self.centered = True
@@ -1015,6 +1020,7 @@ class Switch(Element):
         self.cooldown = cooldown
 
         self.__last_use = time.time()
+        self.texture = [pygame.transform.scale(SWICH_TRUE, self.size), pygame.transform.scale(SWITCH_FALSE, self.size)]
 
     def update(self):
         if self.centered:
@@ -1040,13 +1046,13 @@ class Switch(Element):
         rect = pygame.Rect((x, y), self.size)
 
         if GAME_SETTINGS[self.update_var_name]:
-            pygame.draw.rect(screen, (0, 255, 0), rect)
+            screen.blit(self.texture[0], rect.topleft)
         else:
-            pygame.draw.rect(screen, (255, 0, 0), rect)
+            screen.blit(self.texture[1], rect.topleft)
 
 
 class ValueCircler(Element):
-    def __init__(self, percentage_position, size, font_renderer, update_var_name, circled_values, cooldown=0.15):
+    def __init__(self, percentage_position, size, font_renderer, update_var_name, circled_values, cooldown=0.3):
         self.perc_position = percentage_position
         self.size = size
         self.centered = True
@@ -1059,6 +1065,7 @@ class ValueCircler(Element):
         self.cooldown = cooldown
 
         self.__last_use = time.time()
+        self.TEXTURE = pygame.transform.scale(BUT_TEXTURE, self.size)
 
     def update(self):
         if self.centered:
@@ -1098,7 +1105,7 @@ class ValueCircler(Element):
         rect = pygame.Rect((x, y), self.size)
         text_rect = text.get_rect(center=(rect.centerx, rect.centery))
 
-        pygame.draw.rect(screen, (255, 255, 255), rect)
+        screen.blit(self.TEXTURE, rect.topleft)
         screen.blit(text, text_rect)
 
 
@@ -1117,7 +1124,10 @@ class Label(Element):
         x = percentage(SCREENW, self.perc_position[0])
         y = percentage(SCREENH, self.perc_position[1])
         text = self.frenderer.render(self.text, True, (0, 0, 0))
-        screen.blit(text, [x, y])
+        if self.centered:
+            screen.blit(text, [x - text.get_width() / 2, y - text.get_height() / 2])
+        else:
+            screen.blit(text, [x, y])
 
 
 menu_font = pygame.font.SysFont("consolas", 24)
@@ -1136,9 +1146,10 @@ class Gui:
 
 
 menu = Gui([
-    Button([50, 30], [150, 70], "Start", menu_font, on_click_start),
+    Label([50, 30], "AirWarfare", pygame.sysfont.SysFont("consolas", 42)),
+    Button([50, 40], [150, 70], "Start", menu_font, on_click_start),
     Button([50, 50], [150, 70], "Settings", menu_font, on_click_settings),
-    Button([50, 70], [150, 70], "Exit", menu_font, sys.exit)
+    Button([50, 60], [150, 70], "Exit", menu_font, sys.exit)
 ])
 
 settings = Gui([
