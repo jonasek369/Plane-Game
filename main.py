@@ -34,6 +34,8 @@ myfont = pygame.font.SysFont('Consolas', 24)
 Critical = pygame.font.SysFont("Consolas", 40)
 SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
 
+GAME_SETTINGS["G_RESOLUTION"] = f"{SCREENW}x{SCREENH}"
+
 controls_js: dict = {}
 running = True
 if GAME_SETTINGS["FULLSCREEN"]:
@@ -98,16 +100,23 @@ NEEDED_KEYS = {}
 AMMO_INFO = {}
 
 IMPLEMENTED_AMMOTYPES = ["20", "303", "792"]
+AMMOTYPES_TEXTURES = {}
 
+for i in IMPLEMENTED_AMMOTYPES:
+    try:
+        AMMOTYPES_TEXTURES[i] = pygame.image.load(DATA_DIR + f"\\Sprites\\{i}.png").convert_alpha()
+    except FileNotFoundError:
+        print(f"{i}.png dose not exist. Unimplemented texture for {i} caliber ammo")
 USER_UUID = make_uuid()
 
 try:
-    with open(WORKING_DIR + "\\" + "data" + "\\" + "NeededKeys.json", "r") as file:
+    with open(DATA_DIR + "\\" + "NeededKeys.json", "r") as file:
         NEEDED_KEYS = json.loads(file.read())
 except Exception as e:
     raise Exception("??: Unknown Exception: ", e)
 
-assert "KEYS" in NEEDED_KEYS.keys(), "LINE: ~58~ -> Could not load file needed keys from data folder make sure you openening exe in same folder as where is data folder "
+assert "KEYS" in NEEDED_KEYS.keys(), "LINE: ~58~ -> Could not load file needed keys from data folder make sure you " \
+                                     "openening exe in same folder as where is data folder "
 
 with open(DATA_DIR + "\\Settings\\AmmoTypes.json", "r") as file:
     AMMO_INFO = json.loads(file.read())
@@ -134,12 +143,21 @@ BUT_TEXTURE = pygame.image.load(DATA_DIR + "\\Sprites\\circler.png").convert_alp
 
 
 def apply_changes():
-    global FPS_LIMIT, R_LEN, R_RANGE, R_HITBOX_SIZE, R_DEPTH, DRAW_TRACERS, R_VIEWRANGE, R_DRAW_CIRCLES, DEBUG, SCREENW, SCREENH, screen, MENU_STATE
-    SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
+    global FPS_LIMIT, R_LEN, R_RANGE, R_HITBOX_SIZE, R_DEPTH, DRAW_TRACERS, R_VIEWRANGE, R_DRAW_CIRCLES, DEBUG, SCREENW, SCREENH, screen, MENU_STATE, SCREEN_BUFFER, TRANSPARENT_LAYER
+
+    p.position[0] += (int(GAME_SETTINGS["G_RESOLUTION"].split("x")[0]) - SCREENW) / 2
+    p.position[1] += (int(GAME_SETTINGS["G_RESOLUTION"].split("x")[1]) - SCREENH) / 2
+
+    SCREENW, SCREENH = int(GAME_SETTINGS["G_RESOLUTION"].split("x")[0]), int(
+        GAME_SETTINGS["G_RESOLUTION"].split("x")[1])
+    SCREEN_BUFFER = pygame.transform.scale(SCREEN_BUFFER, [SCREENW, SCREENH])
+    TRANSPARENT_LAYER = pygame.transform.scale(TRANSPARENT_LAYER, [SCREENW, SCREENH])
+
     if GAME_SETTINGS["FULLSCREEN"]:
         screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE | pygame.FULLSCREEN)
     else:
         screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE)
+
     FPS_LIMIT = GAME_SETTINGS["FPS_LIMIT"]
     R_LEN = GAME_SETTINGS["R_LEN"]
     R_RANGE = GAME_SETTINGS["R_RANGE"]
@@ -315,8 +333,13 @@ class Player:
         done[0] += ammo_label.get_size()[0]
         done[1] += ammo_label.get_size()[1]
         for GUN in self.guns:
-            textsurface = myfont.render(f"{GUN}: {self.guns[GUN]['RESERVE']}", True, (255, 255, 255))
+            textsurface = myfont.render(f"{self.guns[GUN]['RESERVE']}", True, (255, 255, 255))
             screen.blit(textsurface, (SCREENW - textsurface.get_size()[0], done[1]))
+            try:
+                texture = AMMOTYPES_TEXTURES[GUN]
+                screen.blit(texture, (SCREENW - textsurface.get_size()[0] - 32, done[1] - 6))
+            except KeyError:
+                pass
             done[0] += textsurface.get_size()[0]
             done[1] += textsurface.get_size()[1]
 
@@ -667,7 +690,7 @@ class Enemy:
         pygame.draw.line(screen, (255, 0, 0), botleft, topleft, 5)
 
         if DRAW_TRACERS:
-            pygame.draw.line(screen, (0, 0, 255), self.position, p.position, 6)
+            pygame.draw.line(screen, (0, 255, 0), self.position, p.position, 6)
         # self.hitbox.draw()
 
 
@@ -835,13 +858,14 @@ background_mp = pygame.transform.scale(background, (100, 100))
 
 
 class Explosion:
-    def __init__(self, sprt, pos):
+    def __init__(self, sprt, pos, start_at=None):
         self.sprite_info = {}
         self.position = pos
         self.load_sprite_info(sprt)
         self.active = True
         self.sprite = pygame.image.load(DATA_DIR + self.sprite_info["SPRITE_LOCATION"]).convert()
         self.spritesheet = SpriteSheet(self.sprite)
+        self.start_at = start_at
 
     def load_sprite_info(self, spi) -> None:
         if ".json" not in spi:
@@ -851,6 +875,10 @@ class Explosion:
         self.sprite_info = info
 
     def render(self):
+        if self.start_at and time.time() - self.start_at <= 0:
+            self.sprite_info["PLANE_TIMER"] = time.time()
+            return
+
         if self.sprite_info["PLANE_TIMER"] + self.sprite_info["PLANE_TIMEOUT"] <= time.time():
             self.sprite_info["PLANE_TIMER"] = time.time()
             self.sprite_info["PLANE_FRAME"] += 1
@@ -936,7 +964,12 @@ def update(dt, fps) -> None:
         # keeping if I have any problem later
         # entity.render()
         if not entity.alive:
-            explosions.append(Explosion(GAME_SETTINGS["ExplosionSprite"], entity.position))
+            for _ in range(1, 3):
+                x = random.randint(-70, 70)
+                y = random.randint(-70, 70)
+                np = [entity.position[0] + x, entity.position[1] + y]
+                explosions.append(
+                    Explosion(GAME_SETTINGS["ExplosionSprite"], np, time.time() + random.uniform(0, 0.15)))
             pygame.mixer.Channel(0).play(EXPLOSION)
             entities.pop(pos)
     for pos, explosion in enumerate(explosions):
@@ -1153,10 +1186,11 @@ menu = Gui([
 ])
 
 settings = Gui([
-    Label([30, 8], "fps limit", menu_font),
+    Label([37, 10], "fps limit", menu_font),
     ValueCircler([50, 10], [150, 70], menu_font, "FPS_LIMIT", [0, 30, 60, 144, 244, 360]),
-    Label([30, 20], "fullscreen", menu_font),
-    Switch([50, 20], 50, "FULLSCREEN"),
+    ValueCircler([50, 20], [150, 70], menu_font, "G_RESOLUTION", ["1280x720", "1920x1080", "2048x1080"]),
+    Label([40, 30], "fullscreen", menu_font),
+    Switch([50, 30], 50, "FULLSCREEN"),
     Button([80, 80], [150, 70], "Apply", menu_font, apply_changes)
 ])
 
@@ -1184,7 +1218,7 @@ def blurSurf(surface, amt):
 
 
 def loop() -> None:
-    global running, MAP_RECTANGLE, SCREEN_BUFFER, IN_MENU, TRANSPARENT_LAYER
+    global running, MAP_RECTANGLE, SCREEN_BUFFER, IN_MENU, TRANSPARENT_LAYER, background
     getTicksLastFrame = 0
     from_game_switch = False
     TRANSPARENT_LAYER.set_alpha(128)  # alpha level
