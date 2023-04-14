@@ -1,5 +1,6 @@
 import json
 import sys
+import threading
 import time
 from enum import Enum, auto
 
@@ -27,10 +28,9 @@ with open(DATA_DIR + "\\Settings\\Game.json", "r") as file:
 
 pygame.init()
 pygame.font.init()
-pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
+pygame.mixer.pre_init(frequency=44100, size=-16, channels=8, buffer=512)
 pygame.mixer.init()
 
-myfont = pygame.font.SysFont('Consolas', 24)
 Critical = pygame.font.SysFont("Consolas", 40)
 SCREENW, SCREENH = GAME_SETTINGS["WIDTH"], GAME_SETTINGS["HEIGHT"]
 
@@ -127,6 +127,9 @@ for ammotype in IMPLEMENTED_AMMOTYPES:
 buttons = 3
 DEBUG = GAME_SETTINGS["DEBUG"]
 
+RADIO = None
+RADIO_ENABLED = GAME_SETTINGS["ENABLE_RADIO"]
+
 # variables for menu
 SCREEN_BUFFER = pygame.Surface(screen.get_size())
 IN_MENU = True
@@ -143,7 +146,7 @@ BUT_TEXTURE = pygame.image.load(DATA_DIR + "\\Sprites\\circler.png").convert_alp
 
 
 def apply_changes():
-    global FPS_LIMIT, R_LEN, R_RANGE, R_HITBOX_SIZE, R_DEPTH, DRAW_TRACERS, R_VIEWRANGE, R_DRAW_CIRCLES, DEBUG, SCREENW, SCREENH, screen, MENU_STATE, SCREEN_BUFFER, TRANSPARENT_LAYER
+    global FPS_LIMIT, R_LEN, R_RANGE, R_HITBOX_SIZE, R_DEPTH, DRAW_TRACERS, R_VIEWRANGE, R_DRAW_CIRCLES, DEBUG, SCREENW, SCREENH, screen, MENU_STATE, SCREEN_BUFFER, TRANSPARENT_LAYER, RADIO, RADIO_ENABLED
 
     p.position[0] += (int(GAME_SETTINGS["G_RESOLUTION"].split("x")[0]) - SCREENW) / 2
     p.position[1] += (int(GAME_SETTINGS["G_RESOLUTION"].split("x")[1]) - SCREENH) / 2
@@ -157,7 +160,11 @@ def apply_changes():
         screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE | pygame.FULLSCREEN)
     else:
         screen = pygame.display.set_mode([SCREENW, SCREENH], pygame.RESIZABLE)
-
+    if not GAME_SETTINGS["ENABLE_RADIO"] and RADIO:
+        RADIO.clear()
+    if GAME_SETTINGS["ENABLE_RADIO"] and RADIO is None:
+        RADIO = Radio()
+    RADIO_ENABLED = GAME_SETTINGS["ENABLE_RADIO"]
     FPS_LIMIT = GAME_SETTINGS["FPS_LIMIT"]
     R_LEN = GAME_SETTINGS["R_LEN"]
     R_RANGE = GAME_SETTINGS["R_RANGE"]
@@ -328,12 +335,12 @@ class Player:
         screen.blit(image_copy, (
             self.position[0] - int(image_copy.get_width() / 2), self.position[1] - int(image_copy.get_height() / 2)))
         done = [20, 0]
-        ammo_label = myfont.render(f"Ammunition", True, (255, 255, 255))
+        ammo_label = menu_font.render(f"Ammunition", True, (255, 255, 255))
         screen.blit(ammo_label, (SCREENW - ammo_label.get_size()[0], done[1]))
         done[0] += ammo_label.get_size()[0]
         done[1] += ammo_label.get_size()[1]
         for GUN in self.guns:
-            textsurface = myfont.render(f"{self.guns[GUN]['RESERVE']}", True, (255, 255, 255))
+            textsurface = menu_font.render(f"{self.guns[GUN]['RESERVE']}", True, (255, 255, 255))
             screen.blit(textsurface, (SCREENW - textsurface.get_size()[0], done[1]))
             try:
                 texture = AMMOTYPES_TEXTURES[GUN]
@@ -672,7 +679,7 @@ class Enemy:
         screen.blit(image_copy, (
             self.position[0] - int(image_copy.get_width() / 2), self.position[1] - int(image_copy.get_height() / 2)))
 
-        # ent = myfont.render(f"HP: {self.sprite_info['HP']}", True, (255, 255, 255))
+        # ent = menu_font.render(f"HP: {self.sprite_info['HP']}", True, (255, 255, 255))
         # screen.blit(ent, (self.position.x - ent.get_width() / 2, self.position.y + 64))
 
         hp_perc = get_percentage(self.MAX_HP, self.sprite_info["HP"])
@@ -700,7 +707,7 @@ for i in range(GAME_SETTINGS["ENEMIES"]):
 
 
 def init() -> None:
-    global buttons
+    global buttons, RADIO
     """
     innits all the important stuff
     :return: None
@@ -716,12 +723,17 @@ def init() -> None:
     log(LogTypes.INFO, "Made by Jonáš Erlebach")
     log(LogTypes.INFO, "Official game page: https://jonasek369.itch.io/airwarfare")
     buttons = controls_js["mouse_buttons"]
+    if RADIO_ENABLED:
+        RADIO = Radio()
     loop()
 
 
 def event_listener() -> None:
     global running, SCREENW, SCREENH, SCREEN_BUFFER, TRANSPARENT_LAYER, C_X, C_Y
     for event in pygame.event.get():
+        if event.type in [pygame.KEYUP, pygame.KEYDOWN, pygame.MOUSEWHEEL, pygame.MOUSEBUTTONUP,
+                          pygame.MOUSEBUTTONDOWN] and RADIO_ENABLED:
+            RADIO.on_event(event)
         if event.type == pygame.QUIT:
             running = False
         if event.type == pygame.VIDEORESIZE:
@@ -842,8 +854,8 @@ def gb_controls() -> None or str:
 def draw_debug(fps) -> None:
     if fps == 0:
         fps = 1
-    fps_meter = myfont.render(f"{int(fps)} FPS", True, (255, 255, 255))
-    frame_time = myfont.render(f"{round((1 / fps) * 1000, 2)} ms", True, (255, 255, 255))
+    fps_meter = menu_font.render(f"{int(fps)} FPS", True, (255, 255, 255))
+    frame_time = menu_font.render(f"{round((1 / fps) * 1000, 2)} ms", True, (255, 255, 255))
     screen.blit(fps_meter, (0, 110))
     screen.blit(frame_time, (0, 110 + fps_meter.get_height()))
 
@@ -1143,10 +1155,10 @@ class ValueCircler(Element):
 
 
 class Label(Element):
-    def __init__(self, percentage_position, text, font_renderer):
+    def __init__(self, percentage_position, text, font_renderer, centered=True):
         self.perc_position = percentage_position
 
-        self.centered = True
+        self.centered = centered
         self.frenderer: pygame.font.SysFont = font_renderer
         self.text = text
 
@@ -1163,14 +1175,100 @@ class Label(Element):
             screen.blit(text, [x, y])
 
 
+class Radio:
+    def __init__(self):
+        self.radio_channel = pygame.mixer.Channel(3)
+        self.music = []
+        self.LOADING = True
+        t = threading.Thread(target=self.load_music)
+        t.start()
+
+        self.current_start = 0.0
+        self.current_index = -1
+
+        self.skipped = False
+        self.volume = 0.3
+
+    def load_music(self):
+        for file in os.listdir(DATA_DIR + "\\Sound\\Radio"):
+            if file[len(file) - 4:] in [".mp3", ".wav", ".ogg"]:
+                try:
+                    self.music.append({"name": file[:len(file) - 4],
+                                       "sound": pygame.mixer.Sound(DATA_DIR + "\\Sound\\Radio\\" + file)})
+                    log(LogTypes.SUCCESS, f"Loaded {file} to radio")
+                except Exception as error:
+                    log(LogTypes.ERROR, f"Error while trying to load file: {file}. ERROR: {error}")
+
+            else:
+                log(LogTypes.WARNING, f"Found a file with {file[len(file) - 4:]} extension which is unsupported")
+        log(LogTypes.INFO, f"Finished loading music to radio")
+        self.LOADING = False
+
+    def on_event(self, event):
+        # cycling between songs
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_RIGHT and pygame.key.get_pressed()[pygame.K_LCTRL]:
+            self.current_index += 1
+            if self.current_index == len(self.music):
+                self.current_index = 0
+            self.radio_channel.stop()
+            self.skipped = True
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_LEFT and pygame.key.get_pressed()[pygame.K_LCTRL]:
+            self.current_index -= 1
+            if self.current_index < 0:
+                self.current_index = len(self.music) - 1
+            self.radio_channel.stop()
+            self.skipped = True
+
+        # mouse wheel volume change
+        if pygame.key.get_pressed()[pygame.K_LCTRL] and event.type == pygame.MOUSEWHEEL:
+            if event.y < 0:
+                self.volume -= 0.05
+                if self.volume < 0:
+                    self.volume = 0
+            else:
+                self.volume += 0.05
+                if self.volume > 1:
+                    self.volume = 1
+
+    def update(self):
+        self.radio_channel.unpause()
+        self.radio_channel.set_volume(self.volume)
+        if time.time() - self.current_start <= 5:
+            if len(f"Now playing {self.music[self.current_index]['name']}") > 80:
+                text = f"Now playing {self.music[self.current_index]['name'][:40]}..."
+            else:
+                text = f"Now playing {self.music[self.current_index]['name']}"
+            playing = menu_font.render(text, True, (255, 255, 255))
+            playing.set_alpha((get_percentage(5, 5-(time.time() - self.current_start))/100)*255)
+            screen.blit(playing, (SCREENW/2-playing.get_width()/2, 0))
+
+        if not self.music or self.radio_channel.get_busy():
+            return
+        if not self.skipped:
+            self.current_index += 1
+            if self.current_index == len(self.music):
+                self.current_index = 0
+        else:
+            self.skipped = False
+
+        self.current_start = time.time()
+        self.radio_channel.play(self.music[self.current_index]["sound"])
+
+        if GAME_SETTINGS["DEBUG"]:
+            log(LogTypes.INFO, f"Playing {self.music[self.current_index]['name']}")
+
+    def clear(self):
+        self.radio_channel.pause()
+
+
 menu_font = pygame.font.SysFont("consolas", 24)
 
 
 class Gui:
     def __init__(self, elements):
         self.elements = elements
-        for i in self.elements:
-            assert isinstance(i, Element)
+        for element in self.elements:
+            assert isinstance(element, Element)
 
     def render(self):
         for element in self.elements:
@@ -1186,11 +1284,13 @@ menu = Gui([
 ])
 
 settings = Gui([
-    Label([37, 10], "fps limit", menu_font),
+    Label([30, 10], "fps limit", menu_font, False),
     ValueCircler([50, 10], [150, 70], menu_font, "FPS_LIMIT", [0, 30, 60, 144, 244, 360]),
     ValueCircler([50, 20], [150, 70], menu_font, "G_RESOLUTION", ["1280x720", "1920x1080", "2048x1080"]),
-    Label([40, 30], "fullscreen", menu_font),
+    Label([30, 30], "fullscreen", menu_font, False),
     Switch([50, 30], 50, "FULLSCREEN"),
+    Label([30, 40], "radio", menu_font, False),
+    Switch([50, 40], 50, "ENABLE_RADIO"),
     Button([80, 80], [150, 70], "Apply", menu_font, apply_changes)
 ])
 
@@ -1224,6 +1324,7 @@ def loop() -> None:
     TRANSPARENT_LAYER.set_alpha(128)  # alpha level
     TRANSPARENT_LAYER.fill((255, 255, 255))
     while running:
+        event_listener()
         if not IN_MENU:
             screen.fill((50, 50, 50))
             from_game_switch = True
@@ -1232,10 +1333,13 @@ def loop() -> None:
             t = pygame.time.get_ticks()
             dt = (t - getTicksLastFrame) / 1000.0
             getTicksLastFrame = t
+            if RADIO_ENABLED:
+                RADIO.update()
             update(dt, clock.get_fps())
             clock.tick(FPS_LIMIT)
         elif IN_MENU:
-            event_listener()
+            if RADIO_ENABLED:
+                RADIO.update()
             getTicksLastFrame = pygame.time.get_ticks()
             if from_game_switch:
                 SCREEN_BUFFER = blurSurf(screen.copy(), 20)

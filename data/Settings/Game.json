@@ -3,6 +3,7 @@
     "WIDTH": 1280,
     "HEIGHT": 720,
     "FPS_LIMIT": 0,
+    "ENABLE_RADIO": true,
     "R_VIEWRANGE": false,
     "DRAW_ENEMY_RAY_CIRCLES": false,
     "PlayerPlane": "Spitfire.json",
@@ -19,5 +20,5 @@
         "HIT": 0.5
     },
     "ENEMIES": 10,
-    "DEBUG": false
+    "DEBUG": true
 }
