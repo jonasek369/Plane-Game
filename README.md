@@ -4,7 +4,7 @@ I've made this game in a hurry for school presentation. It's not the best and qu
 I'd love to hear any feedback
 
 ## New Radio
-Newly added radio you can add your own songs into `data\Sound\Radio` and the cycle  
+Newly added radio you can add your own songs into `data\Sound\Radio` (if you dont have this folder add it) and the cycle  
 between them using CTRL + LEFT ARROW/RIGHT ARROW and change volume using CTRL + MOUSE SCROLL
 
 ## Experimental feature
