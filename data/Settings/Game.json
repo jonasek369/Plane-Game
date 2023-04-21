@@ -20,5 +20,7 @@
         "HIT": 0.5
     },
     "ENEMIES": 10,
-    "DEBUG": true
+    "DEBUG": true,
+    "EXPERIMENTAL_FIRE": false,
+    "EXPERIMENTAL_FIRE_TIMEOUT": 0.1
 }

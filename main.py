@@ -144,6 +144,10 @@ SWITCH_FALSE = pygame.image.load(DATA_DIR + "\\Sprites\\false.png").convert_alph
 
 BUT_TEXTURE = pygame.image.load(DATA_DIR + "\\Sprites\\circler.png").convert_alpha()
 
+if GAME_SETTINGS["EXPERIMENTAL_FIRE"]:
+    expfire_last = time.time()
+    expfire_tm = GAME_SETTINGS["EXPERIMENTAL_FIRE_TIMEOUT"]
+
 
 def apply_changes():
     global FPS_LIMIT, R_LEN, R_RANGE, R_HITBOX_SIZE, R_DEPTH, DRAW_TRACERS, R_VIEWRANGE, R_DRAW_CIRCLES, DEBUG, SCREENW, SCREENH, screen, MENU_STATE, SCREEN_BUFFER, TRANSPARENT_LAYER, RADIO, RADIO_ENABLED
@@ -203,12 +207,14 @@ class Bullet:
         self.owner = owner
 
     def update(self, dt) -> None:
+        if not self.alive:
+            return
         self.hitbox = Circle(self.position, self.info["SIZE"])
         for entity in entities:
             if circles_collide(entity.hitbox, self.hitbox):
                 if self.owner == entity.uuid:
                     continue
-                entity.get_hit(self.info["DAMAGE"] / 3 if self.owner != USER_UUID else self.info["DAMAGE"])
+                entity.get_hit(self.info["DAMAGE"])
                 self.alive = False
         self.position[0] += math.cos(self.angle) * self.info["SPEED"] * dt
         self.position[1] += math.sin(self.angle) * self.info["SPEED"] * dt
@@ -642,8 +648,8 @@ class Enemy:
         # mayor performance improvements for non stacked enemies
         if distance(self.position[0], player.position[0], self.position[1], player.position[1]) > R_LEN + (R_LEN / 4):
             return
-        for i in range(int(R_RANGE[0]), int(R_RANGE[1]), R_DEPTH):
-            rays.append(Ray(self.position, self.angle + (i / 100), player))
+        for depth in range(int(R_RANGE[0]), int(R_RANGE[1]), R_DEPTH):
+            rays.append(Ray(self.position, self.angle + (depth / 100), player))
         if R_VIEWRANGE:
             self.draw_vision_cone()
         saw_player = False
@@ -667,6 +673,7 @@ class Enemy:
         self.render()
 
     def render(self) -> None:
+        global expfire_last
         if self.sprite_info["PLANE_TIMER"] + self.sprite_info["PLANE_TIMEOUT"] <= time.time():
             self.sprite_info["PLANE_TIMER"] = time.time()
             self.sprite_info["PLANE_FRAME"] += 1
@@ -698,10 +705,13 @@ class Enemy:
 
         if DRAW_TRACERS:
             pygame.draw.line(screen, (0, 255, 0), self.position, p.position, 6)
+        if GAME_SETTINGS["EXPERIMENTAL_FIRE"] and self.sprite_info["HP"] <= 200 and time.time() - expfire_last >= expfire_tm:
+            expfire_last = time.time()
+            explosions.append(Explosion(GAME_SETTINGS["ExplosionSprite"], [self.position[0], self.position[1]], start_at=random.uniform(0, 0.1)))
         # self.hitbox.draw()
 
 
-for i in range(GAME_SETTINGS["ENEMIES"]):
+for _ in range(GAME_SETTINGS["ENEMIES"]):
     entities.append(
         Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
 
@@ -924,7 +934,7 @@ def on_player_death():
         C_Y = 0
         p = Player(GAME_SETTINGS["PlayerPlane"])
         entities.append(p)
-        for i in range(GAME_SETTINGS["ENEMIES"]):
+        for _ in range(GAME_SETTINGS["ENEMIES"]):
             entities.append(
                 Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
 
@@ -960,7 +970,7 @@ def update(dt, fps) -> None:
     event_listener()
     minimap.blit(background_mp, (0, 0))
     for index, bullet in enumerate(bullets):
-        if time.time() - bullet.created >= BULLET_LIFETIME:
+        if time.time() - bullet.created >= BULLET_LIFETIME or not bullet.alive:
             bullets.pop(index)
             continue
         bullet.update(dt)

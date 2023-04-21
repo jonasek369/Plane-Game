@@ -7,6 +7,9 @@ I'd love to hear any feedback
 Newly added radio you can add your own songs into `data\Sound\Radio` and the cycle  
 between them using CTRL + LEFT ARROW/RIGHT ARROW and change volume using CTRL + MOUSE SCROLL
 
+## Experimental feature
+for planes that are low health (<200hp) there are explosions to indicate fire you can turn this feature on in `data\Settings\Game.json`
+
 ## Itch.io page
 https://jonasek369.itch.io/airwarfare
 
@@ -16,3 +19,4 @@ email: jonaserlebach@email.cz
 
 ## Known issues (and status)
 - [x] on window resize player is not centered
+- [x] bullets deal more damage (because they aren't deleted after hitting someone)
