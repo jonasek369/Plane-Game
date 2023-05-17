@@ -1,3 +1,6 @@
+#
+# !!!!! WARNING DO NOT CHANGE ANYTHING IN THIS FILE IT CAN BREAK THE GAME !!!!
+#
 import math
 import os
 import random
@@ -12,11 +15,14 @@ MAP_SIZE = (8000, 8000)
 
 os.system("cls")
 
+
 # +------------------------------------------------------------+
 # |                Made by Jonáš Erlebach                      |
 # |  Thanks to third party libraries from https://pypi.org/    |
 # +------------------------------------------------------------+
 
+
+# HELPER FUNCTIONS
 
 def make_uuid():
     return "".join(random.choices(UUID_LIST, k=UUID_LENGHT))
@@ -42,7 +48,7 @@ def colored(rgb, text):
 def averageout_array(array):
     arlen = len(array)
     if arlen == 0:
-        return False
+        return None
     return sum(array) / len(array)
 
 
@@ -77,6 +83,7 @@ def cons(_min, val, _max):
     if val > _max:
         return _max
     return val
+
 
 @dataclass
 class LogTypes:

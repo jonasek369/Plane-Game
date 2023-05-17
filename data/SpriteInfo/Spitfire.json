@@ -4,7 +4,7 @@
     "FRAMES": 6,
     "GUNS": {
         "303": {
-            "RATEOFFIRE": 1000,
+            "RATE_OF_FIRE": 1000,
             "RESERVE": 1400,
             "TIMEOUT": 0.06,
             "LAST_SHOT": 0,
@@ -16,7 +16,7 @@
             ]
         },
         "20": {
-            "RATEOFFIRE": 600,
+            "RATE_OF_FIRE": 600,
             "RESERVE": 120,
             "TIMEOUT": 0.1,
             "LAST_SHOT": 0,

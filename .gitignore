@@ -3,3 +3,6 @@ main.spec
 .idea
 dist
 build
+unused assets
+**.pyc
+__pycache__

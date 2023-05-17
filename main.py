@@ -1296,6 +1296,7 @@ menu = Gui([
 settings = Gui([
     Label([30, 10], "fps limit", menu_font, False),
     ValueCircler([50, 10], [150, 70], menu_font, "FPS_LIMIT", [0, 30, 60, 144, 244, 360]),
+    Label([30, 20], "resolution", menu_font, False),
     ValueCircler([50, 20], [150, 70], menu_font, "G_RESOLUTION", ["1280x720", "1920x1080", "2048x1080"]),
     Label([30, 30], "fullscreen", menu_font, False),
     Switch([50, 30], 50, "FULLSCREEN"),
