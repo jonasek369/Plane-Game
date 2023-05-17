@@ -202,25 +202,25 @@ class Bullet:
         self.created = time.time()
         self.angle = angle
         self.alive = True
-        self.position = [startx, starty]
-        self.hitbox = Circle([startx, starty], 1)
+        self.position = Vector2(startx, starty)
         self.owner = owner
 
     def update(self, dt) -> None:
         if not self.alive:
             return
-        self.hitbox = Circle(self.position, self.info["SIZE"])
+        ray = Ray(self.position, self.angle)
         for entity in entities:
-            if circles_collide(entity.hitbox, self.hitbox):
-                if self.owner == entity.uuid:
-                    continue
-                entity.get_hit(self.info["DAMAGE"])
-                self.alive = False
+            if self.owner == entity.uuid:
+                continue
+            for hitbox in entity.hitbox:
+                if ray.cast(hitbox) and distance_vec(self.position, entity.position) < 75:
+                    entity.get_hit(self.info["DAMAGE"])
+                    self.alive = False
         self.position[0] += math.cos(self.angle) * self.info["SPEED"] * dt
         self.position[1] += math.sin(self.angle) * self.info["SPEED"] * dt
 
     def render(self) -> None:
-        self.hitbox.draw()
+        Ray(self.position, self.angle).draw(10)
 
 
 class SpriteSheet:
@@ -239,14 +239,27 @@ class SpriteSheet:
         return image
 
 
+def angle_to_vec(angle):
+    return Vector2(math.cos(angle), math.sin(angle))
+
+
+class Boundary:
+    def __init__(self, a: Vector2, b: Vector2):
+        self.a = a
+        self.b = b
+
+    def draw(self):
+        pygame.draw.line(screen, (0, 255, 0), self.a, self.b)
+
+
 class Player:
     def __init__(self, sprite_info):
-        self.position = [SCREENW // 2, SCREENH // 2]
+        self.position = Vector2(SCREENW // 2, SCREENH // 2)
         self.angle = math.pi * 1.5
         self.deltas = [math.cos(self.angle), math.sin(self.angle)]
         self.motor_percentage = 70
         self.guns = {}
-        self.hitbox = None
+        self.hitbox = []
 
         self.uuid = USER_UUID
 
@@ -315,12 +328,16 @@ class Player:
         self.update_hitboxes()
 
     def update_hitboxes(self) -> None:
-        if self.hitbox is None:
-            for PART in self.sprite_info["HITBOXES"]:
-                part_bb = self.sprite_info["HITBOXES"][PART]["BOUNDING_BOX"]
-                part_bb[0] = self.position[0]
-                part_bb[1] = self.position[1]
-                self.hitbox = Circle(Vector2(part_bb), 25 * self.sprite_info["PLANE_SCALE"])
+        # if self.hitbox is None:
+        self.hitbox = [
+            Boundary(
+                Vector2(self.position.x - (20 * self.sprite_info["PLANE_SCALE"]), self.position.y),
+                Vector2(self.position.x + (20 * self.sprite_info["PLANE_SCALE"]), self.position.y)),
+            Boundary(
+                Vector2(self.position.x, self.position.y - (20 * self.sprite_info["PLANE_SCALE"])),
+                Vector2(self.position.x, self.position.y + (20 * self.sprite_info["PLANE_SCALE"])),
+            )
+        ]
 
     def get_hit(self, damage) -> None:
         self.sprite_info["HP"] -= damage
@@ -374,6 +391,9 @@ class Player:
         # acceleration line
         pygame.draw.line(screen, (255, 255, 255), (0, SCREENH - 6),
                          (percentage(SCREENW, self.motor_percentage), SCREENH - 6), 10)
+        if GAME_SETTINGS["DEBUG"]:
+            for hb in self.hitbox:
+                hb.draw()
 
     def motor(self, doru, dt) -> None:
         if doru == 1:
@@ -464,34 +484,53 @@ def player_alive():
 
 
 class Ray:
-    def __init__(self, origin: Vector2, angle: float, plr: Player):
-        self.origin = origin
-        self.angle = angle
-        self.plr = plr
+    def __init__(self, pos: Vector2, angle: float or Vector2, bounced_from=None):
+        self.position = pos
+        if isinstance(angle, Vector2):
+            self.direction = angle
+        else:
+            self.direction = angle_to_vec(angle)
+        self.bounced_from = bounced_from
 
-    def search_for_player(self) -> tuple:
-        for length in range(0, R_LEN, (self.plr.sprite_info["PLANE_SCALE"] * 25)):
-            pos = (
-                self.origin[0] + (math.cos(self.angle) * length),
-                self.origin[1] + (math.sin(self.angle) * length)
-            )
-            if R_DRAW_CIRCLES:
-                pygame.draw.circle(screen, (0, 0, 255), pos, R_HITBOX_SIZE)
-            if circles_collide(Circle(pos, R_HITBOX_SIZE), p.hitbox):
-                return True, length, self.angle
-        return False, None, None
+    def get_point(self, distance: int = 1) -> Vector2:
+        x = self.position.x + self.direction.x * distance
+        y = self.position.y + self.direction.y * distance
+        return Vector2(x, y)
 
-    def search_for_all(self) -> tuple:
-        for ent in entities:
-            for length in range(0, R_LEN, (ent.sprite_info["PLANE_SCALE"] * 25)):
-                pos = (
-                    self.origin[0] + (math.cos(self.angle) * length),
-                    self.origin[1] + (math.sin(self.angle) * length)
-                )
-                # pygame.draw.circle(screen, (0, 0, 255), pos, R_HITBOX_SIZE)
-                if circles_collide(Circle(pos, R_HITBOX_SIZE), ent.hitbox):
-                    return True, ent.uuid
-            return False, None
+    def lookat(self, vec):
+        x = vec.x - self.position.x
+        y = vec.y - self.position.y
+        if x == 0 and y == 0:
+            self.direction = Vector2(0, 0)
+        else:
+            self.direction = Vector2(x, y).normalize()
+
+    def draw(self, length=None):
+        pygame.draw.line(screen, (255, 255, 0), self.position, self.get_point(1000 if length is None else length))
+
+    def cast(self, _wall):
+        x1 = _wall.a.x
+        y1 = _wall.a.y
+        x2 = _wall.b.x
+        y2 = _wall.b.y
+
+        x3 = self.position.x
+        y3 = self.position.y
+        x4 = self.position.x + self.direction.x
+        y4 = self.position.y + self.direction.y
+
+        den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+
+        if den == 0:
+            return
+
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+        u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den
+
+        if 0 < t < 1 and u > 0:
+            return Vector2(x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+        else:
+            return None
 
 
 class Enemy:
@@ -510,7 +549,15 @@ class Enemy:
         self.target_angle = None
         self.STATE = EnemyState.WONDERING
         self.guns = {}
-        self.hitbox = Circle(self.position, 0)
+        self.hitbox = [
+            Boundary(
+                Vector2(self.position.x - 12.5, self.position.y),
+                Vector2(self.position.x + 12.5, self.position.y)),
+            Boundary(
+                Vector2(self.position.x, self.position.y - 12.5),
+                Vector2(self.position.x, self.position.y + 12.5),
+            )
+        ]
         self.sprite_info = {"PLANE_TIMER": time.time()}
         self.load_sprite_info(sprite_info)
         self.sprite = pygame.image.load(DATA_DIR + self.sprite_info["SPRITE_LOCATION"]).convert()
@@ -561,7 +608,15 @@ class Enemy:
             self.alive = False
 
     def update_hitboxes(self) -> None:
-        self.hitbox = Circle(Vector2(self.position), 25 * self.sprite_info["PLANE_SCALE"])
+        self.hitbox = [
+            Boundary(
+                Vector2(self.position.x - (25 * self.sprite_info["PLANE_SCALE"]), self.position.y),
+                Vector2(self.position.x + (25 * self.sprite_info["PLANE_SCALE"]), self.position.y)),
+            Boundary(
+                Vector2(self.position.x, self.position.y - (20 * self.sprite_info["PLANE_SCALE"])),
+                Vector2(self.position.x, self.position.y + (20 * self.sprite_info["PLANE_SCALE"])),
+            )
+        ]
 
     def load_sprite_info(self, spi) -> None:
         if ".json" not in spi:
@@ -654,9 +709,14 @@ class Enemy:
             self.draw_vision_cone()
         saw_player = False
         for ray in rays:
-            output = ray.search_for_player()
-            if output[0]:
-                saw_player = True
+            for phitbox in p.hitbox:
+                output = ray.cast(phitbox)
+                if output:
+                    saw_player = True
+            if saw_player:
+                break
+        if distance_vec(self.position, player.position) >= R_LEN:
+            saw_player = False
 
         if self.STATE == EnemyState.PURSUING and not saw_player:
             self.STATE = EnemyState.WONDERING
@@ -667,8 +727,12 @@ class Enemy:
         if saw_player and not ooc:
             self.DESIRED_ANGLE = calculate_angle(self.position, player.position)
         ray = Ray(self.position, self.angle, None)
-        foundsmth, _id = ray.search_for_all()
-        if foundsmth and _id == USER_UUID:
+        raycast_player = False
+        for phitbox in p.hitbox:
+            output = ray.cast(phitbox)
+            if output:
+                raycast_player = True
+        if raycast_player:
             self.fire()
         self.render()
 
@@ -705,10 +769,15 @@ class Enemy:
 
         if DRAW_TRACERS:
             pygame.draw.line(screen, (0, 255, 0), self.position, p.position, 6)
-        if GAME_SETTINGS["EXPERIMENTAL_FIRE"] and self.sprite_info["HP"] <= 200 and time.time() - expfire_last >= expfire_tm:
+        if GAME_SETTINGS["EXPERIMENTAL_FIRE"] and self.sprite_info[
+            "HP"] <= 200 and time.time() - expfire_last >= expfire_tm:
             expfire_last = time.time()
-            explosions.append(Explosion(GAME_SETTINGS["ExplosionSprite"], [self.position[0], self.position[1]], start_at=random.uniform(0, 0.1)))
-        # self.hitbox.draw()
+            explosions.append(Explosion(GAME_SETTINGS["ExplosionSprite"], [self.position[0], self.position[1]],
+                                        start_at=random.uniform(0, 0.1)))
+
+        if GAME_SETTINGS["DEBUG"]:
+            for hb in self.hitbox:
+                hb.draw()
 
 
 for _ in range(GAME_SETTINGS["ENEMIES"]):
@@ -1249,8 +1318,8 @@ class Radio:
             else:
                 text = f"Now playing {self.music[self.current_index]['name']}"
             playing = menu_font.render(text, True, (255, 255, 255))
-            playing.set_alpha((get_percentage(5, 5-(time.time() - self.current_start))/100)*255)
-            screen.blit(playing, (SCREENW/2-playing.get_width()/2, 0))
+            playing.set_alpha((get_percentage(5, 5 - (time.time() - self.current_start)) / 100) * 255)
+            screen.blit(playing, (SCREENW / 2 - playing.get_width() / 2, 0))
 
         if not self.music or self.radio_channel.get_busy():
             return
