@@ -6,8 +6,6 @@
     "ENABLE_RADIO": true,
     "R_VIEWRANGE": false,
     "DRAW_ENEMY_RAY_CIRCLES": false,
-    "PlayerPlane": "Spitfire.json",
-    "EnemyPlane": "Bf109E-3.json",
     "ExplosionSprite": "Explosion.json",
     "R_LEN": 1000,
     "R_RANGE": [-40, 40],

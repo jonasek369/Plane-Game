@@ -1,4 +1,5 @@
 {
+    "TYPE": "PLANE",
     "SPRITE_LOCATION": "\\Sprites\\Bf109E-3.png",
     "DIMENSIONS": [64, 64],
     "FRAMES": 6,

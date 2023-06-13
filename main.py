@@ -1,4 +1,5 @@
 import json
+import os.path
 import sys
 import threading
 import time
@@ -54,6 +55,16 @@ clock = pygame.time.Clock()
 
 Vector2 = pygame.math.Vector2
 Vector3 = pygame.math.Vector3
+
+PLANES = {}
+
+for SpriteInfo in os.listdir(DATA_DIR+"\\SpriteInfo\\"):
+    with open(DATA_DIR+"\\SpriteInfo\\"+SpriteInfo, "r") as file:
+        SpriteInfoData = json.load(file)
+        if SpriteInfoData["TYPE"] == "PLANE":
+            PLANES[SpriteInfo] = SpriteInfoData
+
+assert len(PLANES) != 0, "Could not load any planes"
 
 """
 sound effects
@@ -473,8 +484,7 @@ class Player:
         self.lastooc = self.ooc
 
 
-p = Player(GAME_SETTINGS["PlayerPlane"])
-entities.append(p)
+p = None
 
 
 def player_alive():
@@ -782,7 +792,7 @@ class Enemy:
 
 for _ in range(GAME_SETTINGS["ENEMIES"]):
     entities.append(
-        Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
+        Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), "Bf109E-3.json"))
 
 
 def init() -> None:
@@ -1085,8 +1095,19 @@ def update(dt, fps) -> None:
 
 
 def on_click_start():
-    global IN_MENU
+    global IN_MENU, MENU_STATE
+    if p is not None:
+        IN_MENU = not IN_MENU
+    else:
+        MENU_STATE = 2
+
+
+def on_click_plane_pick():
+    global p, entities, MENU_STATE, IN_MENU
+    p = Player(GAME_SETTINGS['G_PLAYER_PLANE'])
+    entities.append(p)
     IN_MENU = not IN_MENU
+    MENU_STATE = 1
 
 
 def on_click_settings():
@@ -1269,6 +1290,8 @@ class Radio:
         self.volume = 0.3
 
     def load_music(self):
+        if not os.path.isdir(DATA_DIR + "\\Sound\\Radio"):
+            os.mkdir(DATA_DIR + "\\Sound\\Radio")
         for file in os.listdir(DATA_DIR + "\\Sound\\Radio"):
             if file[len(file) - 4:] in [".mp3", ".wav", ".ogg"]:
                 try:
@@ -1374,6 +1397,23 @@ settings = Gui([
     Button([80, 80], [150, 70], "Apply", menu_font, apply_changes)
 ])
 
+plane_picker = Gui([
+    Label([50, 30], "Pick your plane", menu_font),
+    ValueCircler([50, 20], [150, 70], menu_font, "G_PLAYER_PLANE", [str(i) for i in PLANES.keys()]),
+    Button([50, 50], [150, 70], "Start", menu_font, on_click_plane_pick)
+])
+
+
+class CustomElement(Element):
+    def __init__(self):
+        pass
+
+    def update(self):
+        pass
+
+    def render(self):
+        pass
+
 
 def draw1010grid():
     for x in range(0, SCREENW, 10):
@@ -1435,6 +1475,11 @@ def loop() -> None:
                 screen.blit(SCREEN_BUFFER, (0, 0))
                 screen.blit(TRANSPARENT_LAYER, (0, 0))
                 settings.render()
+            # PLANE PICKER
+            elif MENU_STATE == 2:
+                screen.blit(SCREEN_BUFFER, (0, 0))
+                screen.blit(TRANSPARENT_LAYER, (0, 0))
+                plane_picker.render()
             clock.tick(60)
         pygame.display.update()
     pygame.quit()

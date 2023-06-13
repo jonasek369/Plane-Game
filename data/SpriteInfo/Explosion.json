@@ -1,4 +1,5 @@
 {
+    "TYPE": "PARTICLE",
     "SPRITE_LOCATION": "\\Sprites\\Explosion.png",
     "DIMENSIONS": [64, 64],
     "FRAMES": 17,
