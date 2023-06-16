@@ -58,11 +58,32 @@ Vector3 = pygame.math.Vector3
 
 PLANES = {}
 
-for SpriteInfo in os.listdir(DATA_DIR+"\\SpriteInfo\\"):
-    with open(DATA_DIR+"\\SpriteInfo\\"+SpriteInfo, "r") as file:
+
+class SpriteSheet:
+    """
+    from:
+    https://github.com/russs123/pygame_tutorials
+    """
+
+    def __init__(self, image):
+        self.sheet = image
+
+    def get_image(self, frame, width, height, scale) -> pygame.Surface:
+        image = pygame.Surface((width, height)).convert_alpha()
+        image.blit(self.sheet, (0, 0), ((frame * width), 0, width, height))
+        image = pygame.transform.scale(image, (width * scale, height * scale))
+        return image
+
+
+for SpriteInfo in os.listdir(DATA_DIR + "\\SpriteInfo\\"):
+    with open(DATA_DIR + "\\SpriteInfo\\" + SpriteInfo, "r") as file:
         SpriteInfoData = json.load(file)
+        Name = SpriteInfo[:-5]
         if SpriteInfoData["TYPE"] == "PLANE":
-            PLANES[SpriteInfo] = SpriteInfoData
+            PLANES[Name] = SpriteInfoData
+            PLANES[Name]["SpriteSheet"] = SpriteSheet(
+                pygame.image.load(DATA_DIR + SpriteInfoData["SPRITE_LOCATION"]).convert())
+            PLANES[Name]["Sprite"] = pygame.image.load(DATA_DIR + SpriteInfoData["SPRITE_LOCATION"]).convert()
 
 assert len(PLANES) != 0, "Could not load any planes"
 
@@ -117,7 +138,7 @@ for i in IMPLEMENTED_AMMOTYPES:
     try:
         AMMOTYPES_TEXTURES[i] = pygame.image.load(DATA_DIR + f"\\Sprites\\{i}.png").convert_alpha()
     except FileNotFoundError:
-        print(f"{i}.png dose not exist. Unimplemented texture for {i} caliber ammo")
+        log(LogTypes.WARNING, f"{i}.png dose not exist. Unimplemented texture for {i} caliber ammo")
 USER_UUID = make_uuid()
 
 try:
@@ -163,8 +184,10 @@ if GAME_SETTINGS["EXPERIMENTAL_FIRE"]:
 def apply_changes():
     global FPS_LIMIT, R_LEN, R_RANGE, R_HITBOX_SIZE, R_DEPTH, DRAW_TRACERS, R_VIEWRANGE, R_DRAW_CIRCLES, DEBUG, SCREENW, SCREENH, screen, MENU_STATE, SCREEN_BUFFER, TRANSPARENT_LAYER, RADIO, RADIO_ENABLED
 
-    p.position[0] += (int(GAME_SETTINGS["G_RESOLUTION"].split("x")[0]) - SCREENW) / 2
-    p.position[1] += (int(GAME_SETTINGS["G_RESOLUTION"].split("x")[1]) - SCREENH) / 2
+    # player could not exist because of the plane picker creating one on game start
+    if p:
+        p.position[0] += (int(GAME_SETTINGS["G_RESOLUTION"].split("x")[0]) - SCREENW) / 2
+        p.position[1] += (int(GAME_SETTINGS["G_RESOLUTION"].split("x")[1]) - SCREENH) / 2
 
     SCREENW, SCREENH = int(GAME_SETTINGS["G_RESOLUTION"].split("x")[0]), int(
         GAME_SETTINGS["G_RESOLUTION"].split("x")[1])
@@ -234,22 +257,6 @@ class Bullet:
         Ray(self.position, self.angle).draw(10)
 
 
-class SpriteSheet:
-    """
-    from:
-    https://github.com/russs123/pygame_tutorials
-    """
-
-    def __init__(self, image):
-        self.sheet = image
-
-    def get_image(self, frame, width, height, scale) -> pygame.Surface:
-        image = pygame.Surface((width, height)).convert_alpha()
-        image.blit(self.sheet, (0, 0), ((frame * width), 0, width, height))
-        image = pygame.transform.scale(image, (width * scale, height * scale))
-        return image
-
-
 def angle_to_vec(angle):
     return Vector2(math.cos(angle), math.sin(angle))
 
@@ -264,7 +271,7 @@ class Boundary:
 
 
 class Player:
-    def __init__(self, sprite_info):
+    def __init__(self, sprite_info, sprite):
         self.position = Vector2(SCREENW // 2, SCREENH // 2)
         self.angle = math.pi * 1.5
         self.deltas = [math.cos(self.angle), math.sin(self.angle)]
@@ -285,7 +292,7 @@ class Player:
         assert sprite_info is not None, "Class Player -> param: spritename -> Error: This parameter cant be None"
         self.sprite_info = {"PLANE_TIMER": time.time()}
         self.load_sprite_info(sprite_info)
-        self.sprite = pygame.image.load(DATA_DIR + self.sprite_info["SPRITE_LOCATION"]).convert()
+        self.sprite = sprite
         self.spritesheet = SpriteSheet(self.sprite)
         self.MAX_HP = self.sprite_info["HP"]
 
@@ -325,10 +332,15 @@ class Player:
                     bullets.append(Bullet(calculate_angle(to_, from_), to_[0], to_[1], ammotype, self.uuid))
 
     def load_sprite_info(self, spi) -> None:
-        if ".json" not in spi:
-            spi += ".json"
-        with open(DATA_DIR + "\\" + "SpriteInfo" + "\\" + spi) as file:
-            info = json.loads(file.read())
+        if isinstance(spi, str):
+            if ".json" not in spi:
+                spi += ".json"
+            with open(DATA_DIR + "\\" + "SpriteInfo" + "\\" + spi) as file:
+                info = json.loads(file.read())
+        elif isinstance(spi, dict):
+            info = spi
+        else:
+            raise TypeError(f"spi is unknown type {spi}")
         for key in NEEDED_KEYS["KEYS"]:
             if key not in info.keys():
                 raise KeyError("Class Player -> Function load_sprite_info ->", spi,
@@ -859,15 +871,21 @@ def do_controlaction(function, device, dt) -> None:
     # do not affect game when in menu
     if IN_MENU:
         if IN_MENU_LC + IN_MENU_CD < time.time() and function == "menu":
+            if MENU_STATE == 2:
+                MENU_STATE = 0
+                IN_MENU_LC = time.time()
+                return
             if MENU_STATE == 1:
                 MENU_STATE = 0
                 IN_MENU_LC = time.time()
                 return
-            IN_MENU = False
-            IN_MENU_LC = time.time()
+            else:
+                IN_MENU = False
+                IN_MENU_LC = time.time()
         return
 
     if IN_MENU_LC + IN_MENU_CD < time.time() and function == "menu":
+        MENU_STATE = 0
         IN_MENU = True
         IN_MENU_LC = time.time()
 
@@ -1098,13 +1116,15 @@ def on_click_start():
     global IN_MENU, MENU_STATE
     if p is not None:
         IN_MENU = not IN_MENU
+    if MENU_STATE == 2:
+        MENU_STATE = 1
     else:
         MENU_STATE = 2
 
 
 def on_click_plane_pick():
     global p, entities, MENU_STATE, IN_MENU
-    p = Player(GAME_SETTINGS['G_PLAYER_PLANE'])
+    p = Player(PLANES[GAME_SETTINGS['G_PLAYER_PLANE']], PLANES[GAME_SETTINGS['G_PLAYER_PLANE']]["Sprite"])
     entities.append(p)
     IN_MENU = not IN_MENU
     MENU_STATE = 1
@@ -1275,6 +1295,29 @@ class Label(Element):
             screen.blit(text, [x, y])
 
 
+# Custom Element
+class PlaneRenderer(Element):
+    def __init__(self, percentage_position, size):
+        self.perc_position = percentage_position
+
+        self.size = size
+
+    def update(self):
+        pass
+
+    def render(self):
+        current_plane = PLANES[GAME_SETTINGS["G_PLAYER_PLANE"]]
+        img = current_plane["SpriteSheet"].get_image(current_plane["PLANE_FRAME"], current_plane["DIMENSIONS"][0],
+                                                     current_plane["DIMENSIONS"][1], current_plane["PLANE_SCALE"])
+
+        scaled = pygame.transform.scale(img, self.size)
+        scaled.set_colorkey(0xFF00FF)
+        x = percentage(SCREENW, self.perc_position[0]) - self.size[0] / 2
+        y = percentage(SCREENH, self.perc_position[1]) - self.size[1] / 2
+
+        screen.blit(scaled, (x, y))
+
+
 class Radio:
     def __init__(self):
         self.radio_channel = pygame.mixer.Channel(3)
@@ -1398,21 +1441,11 @@ settings = Gui([
 ])
 
 plane_picker = Gui([
-    Label([50, 30], "Pick your plane", menu_font),
-    ValueCircler([50, 20], [150, 70], menu_font, "G_PLAYER_PLANE", [str(i) for i in PLANES.keys()]),
-    Button([50, 50], [150, 70], "Start", menu_font, on_click_plane_pick)
+    Label([50, 10], "Pick your plane", menu_font),
+    ValueCircler([50, 50], [170, 70], menu_font, "G_PLAYER_PLANE", [str(i) for i in PLANES.keys()]),
+    PlaneRenderer([50, 30], [256, 256]),
+    Button([50, 60], [150, 70], "Start", menu_font, on_click_plane_pick)
 ])
-
-
-class CustomElement(Element):
-    def __init__(self):
-        pass
-
-    def update(self):
-        pass
-
-    def render(self):
-        pass
 
 
 def draw1010grid():
