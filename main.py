@@ -496,7 +496,7 @@ class Player:
         self.lastooc = self.ooc
 
 
-p = None
+p: Player or None = None
 
 
 def player_alive():
@@ -514,7 +514,7 @@ class Ray:
             self.direction = angle_to_vec(angle)
         self.bounced_from = bounced_from
 
-    def get_point(self, distance: int = 1) -> Vector2:
+    def get_point(self, distance: Vector2 = 1) -> Vector2:
         x = self.position.x + self.direction.x * distance
         y = self.position.y + self.direction.y * distance
         return Vector2(x, y)
