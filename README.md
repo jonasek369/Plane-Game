@@ -20,3 +20,4 @@ email: jonaserlebach@email.cz
 ## Known issues (and status)
 - [x] on window resize player is not centered
 - [x] bullets deal more damage (because they aren't deleted after hitting someone)
+- [ ] weird glitch that instantly kills you after one hit of an enemy bullet could not figure this out
