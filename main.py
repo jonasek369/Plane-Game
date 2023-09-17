@@ -58,6 +58,7 @@ Vector3 = pygame.math.Vector3
 
 PLANES = {}
 
+KEY_ANY = -1
 
 class SpriteSheet:
     """
@@ -839,8 +840,9 @@ def event_listener() -> None:
             running = False
         if event.type == pygame.VIDEORESIZE:
             # offsets the player position with videoresize
-            p.position[0] += (event.size[0] - SCREENW) / 2
-            p.position[1] += (event.size[1] - SCREENH) / 2
+            if p:
+                p.position[0] += (event.size[0] - SCREENW) / 2
+                p.position[1] += (event.size[1] - SCREENH) / 2
 
             SCREENW, SCREENH = event.size
             TRANSPARENT_LAYER = pygame.transform.scale(TRANSPARENT_LAYER, (SCREENW, SCREENH))
@@ -937,7 +939,7 @@ def load_controls() -> None:
 
 def gb_controls() -> None or str:
     """
-    genes base controls.json file that can be edited afterwards
+    generates base controls.json file that can be edited afterwards
     :return:
     """
     if os.path.exists("controls.json"):
@@ -1029,11 +1031,11 @@ def on_player_death():
         explosions.clear()
         C_X = 0
         C_Y = 0
-        p = Player(GAME_SETTINGS["PlayerPlane"])
+        p = Player(PLANES[GAME_SETTINGS['G_PLAYER_PLANE']], PLANES[GAME_SETTINGS['G_PLAYER_PLANE']]["Sprite"])
         entities.append(p)
         for _ in range(GAME_SETTINGS["ENEMIES"]):
             entities.append(
-                Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
+                Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), "Bf109E-3.json"))
 
 
 def on_win():
@@ -1052,11 +1054,11 @@ def on_win():
         explosions.clear()
         C_X = 0
         C_Y = 0
-        p = Player(GAME_SETTINGS["PlayerPlane"])
+        p = Player(PLANES[GAME_SETTINGS['G_PLAYER_PLANE']], PLANES[GAME_SETTINGS['G_PLAYER_PLANE']]["Sprite"])
         entities.append(p)
         for _ in range(GAME_SETTINGS["ENEMIES"]):
             entities.append(
-                Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), GAME_SETTINGS["EnemyPlane"]))
+                Enemy(Vector2(random.randint(-4000, 4000), random.randint(-4000, 4000)), "Bf109E-3.json"))
 
 
 def update(dt, fps) -> None:
@@ -1140,7 +1142,7 @@ class Element:
 
 
 class Button(Element):
-    def __init__(self, percentage_position, size, text, font_renderer, callback):
+    def __init__(self, percentage_position, size, text, font_renderer, callback=None, is_key_listener=False):
         self.perc_position = percentage_position
         self.size = size
         self.cb = callback
@@ -1149,7 +1151,30 @@ class Button(Element):
         self.text = text
         self.TEXTURE = pygame.transform.scale(BUT_TEXTURE, self.size)
 
+        self.listens = is_key_listener
+        self.active = False
+        if self.listens:
+            self.__last_click = 0
+            if not controls_js:
+                load_controls()
+            self.keyset = controls_js["keyboard"][text.lower().replace(" ", "_")]["kc"]
+            self.default = text
+
+
     def update(self):
+        if self.listens:
+            if self.keyset:
+                self.text = self.default + f": '{chr(self.keyset)}'"
+            else:
+                self.text = self.default + f": 'UNBIND'"
+        if self.active:
+            self.text = self.default + ": PRESS KEY"
+            for i in range(1, 122):
+                if pygame.key.get_pressed()[i]:
+                    self.keyset = i
+                    self.active = False
+                    self.text = self.default + f": '{chr(i)}'"
+                    controls_js["keyboard"][self.default.lower().replace(" ", "_")]["kc"] = i
         if self.centered:
             x = percentage(SCREENW, self.perc_position[0]) - self.size[0] / 2
             y = percentage(SCREENH, self.perc_position[1]) - self.size[1] / 2
@@ -1159,7 +1184,12 @@ class Button(Element):
         rect = pygame.Rect((x, y), self.size)
 
         if rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0]:
-            self.cb()
+            if self.cb:
+                self.cb()
+            if self.listens:
+                if time.time() - self.__last_click > 0.25:
+                    self.active = not self.active
+                    self.__last_click = time.time()
 
     def render(self):
         if self.centered:
@@ -1171,9 +1201,9 @@ class Button(Element):
         text = self.frenderer.render(self.text, True, (0, 0, 0))
         rect = pygame.Rect((x, y), self.size)
         text_rect = text.get_rect(center=(rect.centerx, rect.centery))
-
         screen.blit(self.TEXTURE, rect.topleft)
         screen.blit(text, text_rect)
+
 
 
 class Switch(Element):
@@ -1412,13 +1442,45 @@ menu_font = pygame.font.SysFont("consolas", 24)
 class Gui:
     def __init__(self, elements):
         self.elements = elements
-        for element in self.elements:
-            assert isinstance(element, Element)
+        self.has_pages = False
+        self.pages = []
+        self.current_page = 0
+        self.__last_cb = 0
+        self.page_element = Button(percentage_position=[10, 10], size=[150, 70], text="NONE", font_renderer=menu_font,
+                                   callback=self.__page_switch)
+        if isinstance(elements, list):
+            for element in self.elements:
+                assert isinstance(element, Element)
+        elif isinstance(elements, dict):
+            for element in self.elements.keys():
+                self.pages.append(element)
+        if len(self.pages) > 1:
+            self.has_pages = True
+
+    def __page_switch(self):
+        if time.time() - self.__last_cb < 0.25:
+            return
+        if self.current_page + 1 > len(self.pages) - 1:
+            self.current_page = 0
+        else:
+            self.current_page += 1
+        self.__last_cb = time.time()
 
     def render(self):
-        for element in self.elements:
-            element.update()
-            element.render()
+        if self.has_pages:
+            new_page_value = self.current_page + 1
+            if new_page_value > len(self.pages) - 1:
+                new_page_value = 0
+            self.page_element.text = self.pages[new_page_value]
+            self.page_element.update()
+            self.page_element.render()
+            for element in self.elements[self.pages[self.current_page]]:
+                element.update()
+                element.render()
+        else:
+            for element in self.elements:
+                element.update()
+                element.render()
 
 
 menu = Gui([
@@ -1428,17 +1490,28 @@ menu = Gui([
     Button([50, 60], [150, 70], "Exit", menu_font, sys.exit)
 ])
 
-settings = Gui([
-    Label([30, 10], "fps limit", menu_font, False),
-    ValueCircler([50, 10], [150, 70], menu_font, "FPS_LIMIT", [0, 30, 60, 144, 244, 360]),
-    Label([30, 20], "resolution", menu_font, False),
-    ValueCircler([50, 20], [150, 70], menu_font, "G_RESOLUTION", ["1280x720", "1920x1080", "2048x1080"]),
-    Label([30, 30], "fullscreen", menu_font, False),
-    Switch([50, 30], 50, "FULLSCREEN"),
-    Label([30, 40], "radio", menu_font, False),
-    Switch([50, 40], 50, "ENABLE_RADIO"),
-    Button([80, 80], [150, 70], "Apply", menu_font, apply_changes)
-])
+settings = Gui(
+    {
+        "game": [
+            Label([30, 10], "fps limit", menu_font, False),
+            ValueCircler([50, 10], [150, 70], menu_font, "FPS_LIMIT", [0, 30, 60, 144, 244, 360]),
+            Label([30, 20], "resolution", menu_font, False),
+            ValueCircler([50, 20], [150, 70], menu_font, "G_RESOLUTION", ["1280x720", "1920x1080", "2048x1080"]),
+            Label([30, 30], "fullscreen", menu_font, False),
+            Switch([50, 30], 50, "FULLSCREEN"),
+            Label([30, 40], "radio", menu_font, False),
+            Switch([50, 40], 50, "ENABLE_RADIO"),
+            Button([80, 80], [150, 70], "Apply", menu_font, apply_changes)
+        ],
+        "controls": [
+            Button([50, 10], [240, 70], "Left", menu_font, None, True),
+            Button([50, 20], [240, 70], "Right", menu_font, None, True),
+            Button([50, 30], [240, 70], "Motor up", menu_font, None, True),
+            Button([50, 40], [240, 70], "Motor Down", menu_font, None, True),
+            Button([50, 50], [240, 70], "Fire", menu_font, None, True)
+        ]
+    }
+)
 
 plane_picker = Gui([
     Label([50, 10], "Pick your plane", menu_font),

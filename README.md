@@ -20,3 +20,4 @@ email: jonaserlebach@email.cz
 ## Known issues (and status)
 - [x] on window resize player is not centered
 - [x] bullets deal more damage (because they aren't deleted after hitting someone)
+- [ ] enemies will insta kill for some reason 
